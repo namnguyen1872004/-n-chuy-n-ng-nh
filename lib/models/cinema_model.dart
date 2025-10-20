@@ -32,14 +32,13 @@ class Cinema {
       imageUrl: (map['imageUrl'] ?? '').toString(),
       snacks: (map['snacks'] is List)
           ? (map['snacks'] as List)
-              .map((v) => Snack.fromMap(Map<String, dynamic>.from(v)))
-              .toList()
+                .map((v) => Snack.fromMap(Map<String, dynamic>.from(v)))
+                .toList()
           : (map['snacks'] is Map)
-              ? (map['snacks'] as Map)
-                  .values
-                  .map((v) => Snack.fromMap(Map<String, dynamic>.from(v)))
-                  .toList()
-              : [],
+          ? (map['snacks'] as Map).values
+                .map((v) => Snack.fromMap(Map<String, dynamic>.from(v)))
+                .toList()
+          : [],
     );
   }
 
@@ -52,7 +51,7 @@ class Cinema {
       'distance': distance,
       'openHours': openHours,
       'imageUrl': imageUrl,
-      // sửa theo Cách B: dùng list cho snacks, không cần s.id
+
       'snacks': snacks.map((s) => s.toMap()).toList(),
     };
   }

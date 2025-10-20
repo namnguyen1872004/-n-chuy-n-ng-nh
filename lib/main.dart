@@ -11,7 +11,6 @@ import 'Screen/movie_detail_screen.dart';
 import 'Screen/booking_screen.dart';
 import 'Screen/seat_selection_screen.dart';
 import 'Screen/movie_selection_screen.dart';
-import 'Screen/cinema_selection_screen.dart';
 import 'Screen/showtimes_screen.dart';
 
 // Models
@@ -52,7 +51,6 @@ class MyApp extends StatelessWidget {
 
           // ===== Dynamic =====
 
-          // /details expects: Movie
           case '/details':
             {
               final args = settings.arguments;
@@ -60,7 +58,6 @@ class MyApp extends StatelessWidget {
               return _err('Lỗi: /details cần Movie.');
             }
 
-          // /movie-selection expects: Cinema (thẳng) hoặc {cinema: Cinema}
           case '/movie-selection':
             {
               final args = settings.arguments;
@@ -75,25 +72,6 @@ class MyApp extends StatelessWidget {
               return _err('Lỗi: /movie-selection cần Cinema.');
             }
 
-          // /cinema-selection expects: {movie: Movie, selectedDate: DateTime}
-          case '/cinema-selection':
-            {
-              final args = settings.arguments;
-              if (args is Map &&
-                  args['movie'] is Movie &&
-                  args['selectedDate'] is DateTime) {
-                return _mat(
-                  CinemaSelectionScreen(
-                    movie: args['movie'] as Movie,
-                    selectedDate: args['selectedDate'] as DateTime,
-                  ),
-                );
-              }
-              return _err('Lỗi: /cinema-selection cần {movie, selectedDate}.');
-            }
-
-          // /showtimes expects: {selectedCinema: Cinema, selectedMovie: Movie, selectedDate: DateTime, selectedTime?: TimeOfDay}
-          // (giữ nguyên nếu constructor của Sếp đúng như vậy; nếu khác, đổi cho khớp)
           case '/showtimes':
             {
               final args = settings.arguments;
@@ -115,7 +93,6 @@ class MyApp extends StatelessWidget {
               );
             }
 
-          // /booking expects: Movie (thẳng) hoặc {movie: Movie}
           case '/booking':
             {
               final args = settings.arguments;
@@ -130,7 +107,6 @@ class MyApp extends StatelessWidget {
               return _err('Lỗi: /booking cần Movie.');
             }
 
-          // /seat-selection expects: {movie: Movie, selectedDate: DateTime, selectedCinema: String, selectedTime: TimeOfDay}
           case '/seat-selection':
             {
               final args = settings.arguments;

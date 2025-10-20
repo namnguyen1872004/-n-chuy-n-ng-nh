@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:url_launcher/url_launcher.dart'; // ⬅️ thêm
+import 'package:url_launcher/url_launcher.dart'; // ✅ dùng launchUrl theo chuẩn pub.dev
 
 // ✅ Import đúng file movie_selection_screen.dart
 import './movie_selection_screen.dart';
@@ -58,7 +58,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
     fetchCinemasFromFirebase();
   }
 
-  // ========= URL Launcher: mở Google Maps chỉ đường theo địa chỉ =========
+  // ========= URL Launcher:  =========
   Future<void> _openDirections(String address) async {
     if (address.trim().isEmpty) {
       if (!mounted) return;
@@ -67,20 +67,22 @@ class _CinemaScreenState extends State<CinemaScreen> {
       );
       return;
     }
+
     final encoded = Uri.encodeComponent(address);
     final uri = Uri.parse(
       'https://www.google.com/maps/dir/?api=1&destination=$encoded&travelmode=driving',
     );
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      if (!mounted) return;
+
+    //  kiểm tra trực tiếp kết quả launchUrl
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+    if (!ok && mounted) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Không thể mở Google Maps')));
     }
   }
-  // ======================================================================
+  // ============================================================================
 
   // Parse snacks -> List<Snack> an toàn
   List<Snack> _parseSnacks(dynamic raw) {
@@ -295,7 +297,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
                   ),
                 ),
                 const Spacer(),
-                _cityPill(), // ⬅️ hiển thị theo biến city
+                _cityPill(),
               ],
             ),
           ),
@@ -311,13 +313,11 @@ class _CinemaScreenState extends State<CinemaScreen> {
                       cinema: filtered[i],
                       onTap: () {
                         if (!mounted) return;
-                        // ✅ Điều hướng đúng: truyền tham số 'cinema'
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => MovieSelectionScreen(
-                              cinema: filtered[i], // ✅ Đúng tham số
-                            ),
+                            builder: (_) =>
+                                MovieSelectionScreen(cinema: filtered[i]),
                           ),
                         );
                       },
@@ -466,7 +466,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
             const Icon(Icons.location_on, size: 16, color: Color(0xFFFF4AA6)),
             const SizedBox(width: 6),
             Text(
-              city, // ⬅️ dùng biến city thay vì text cứng
+              city,
               style: const TextStyle(
                 color: Color(0xFFFF4AA6),
                 fontWeight: FontWeight.w700,
@@ -594,9 +594,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
                         WidgetSpan(
                           alignment: PlaceholderAlignment.middle,
                           child: GestureDetector(
-                            onTap: () => _openDirections(
-                              cinema.address,
-                            ), // ✅ mở Google Maps
+                            onTap: () => _openDirections(cinema.address),
                             child: const Text(
                               'Tìm đường',
                               style: TextStyle(

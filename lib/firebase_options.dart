@@ -42,7 +42,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyCuu1LRyLjfIo2DMi-wrx22DZ1FS7k1Uj0',
-    appId: '1:580954210493:web:1246ba92a5bd47ba29f7d4',
+    appId: '1:580954210493:web:022a4015383482ac29f7d4',
     messagingSenderId: '580954210493',
     projectId: 'hoainam-ebcb8',
     authDomain: 'hoainam-ebcb8.firebaseapp.com',

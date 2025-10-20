@@ -16,7 +16,7 @@ class Movie {
   final String? trailerUrl; // Trailer
   final List<String> galleryImages; // Ảnh phim
 
-  // Thêm field tùy chọn để liên kết với rạp (nếu cần sau này)
+  // Thêm field tùy chọn để liên kết với rạp
   final Map<String, dynamic>? cinemas; // { "1": true, "2": true }
 
   Movie({
