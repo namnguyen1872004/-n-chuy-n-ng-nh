@@ -7,7 +7,14 @@ import 'booking_screen.dart'; // Đảm bảo import đúng
 
 class MovieDetailScreen extends StatelessWidget {
   final Movie movie;
-  final DateTime now = DateTime(2025, 10, 18, 2, 27, 0); // 02:27 AM +07, Saturday, October 18, 2025
+  final DateTime now = DateTime(
+    2025,
+    10,
+    18,
+    2,
+    27,
+    0,
+  ); // 02:27 AM +07, Saturday, October 18, 2025
 
   // Thêm 2 tham số tùy chọn cho trailer và gallery
   final String? trailerUrl;
@@ -33,8 +40,9 @@ class MovieDetailScreen extends StatelessWidget {
               child: CachedNetworkImage(
                 imageUrl: imageUrl,
                 fit: BoxFit.contain,
-                placeholder: (context, url) =>
-                    const Center(child: CircularProgressIndicator()),
+                placeholder: (context, url) => const Center(
+                  child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
+                ),
                 errorWidget: (context, url, error) =>
                     const Icon(Icons.error, color: Colors.white),
               ),
@@ -62,20 +70,21 @@ class MovieDetailScreen extends StatelessWidget {
     final isNowShowing = movie.releaseDate.isBefore(now);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF0B0B0F),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF0B0B0F),
         elevation: 0,
         title: const Text(
           'Thông tin phim',
           style: TextStyle(
-            color: Colors.black,
+            color: Color(0xFFEDEDED),
             fontWeight: FontWeight.bold,
             fontSize: 20,
+            letterSpacing: 0.2,
           ),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back, color: Color(0xFFEDEDED)),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -94,25 +103,47 @@ class MovieDetailScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 5),
+                          color: Colors.black.withOpacity(0.55),
+                          blurRadius: 18,
+                          offset: const Offset(0, 12),
                         ),
                       ],
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: CachedNetworkImage(
-                        imageUrl: movie.posterUrl,
-                        width: double.infinity,
-                        height: 300,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) =>
-                            const Center(child: CircularProgressIndicator()),
-                        errorWidget: (context, url, error) => Container(
-                          color: Colors.grey[300],
-                          child: const Icon(Icons.error, color: Colors.grey),
-                        ),
+                      child: Stack(
+                        children: [
+                          CachedNetworkImage(
+                            imageUrl: movie.posterUrl,
+                            width: double.infinity,
+                            height: 300,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => const Center(
+                              child: CircularProgressIndicator(
+                                color: Color(0xFF8B1E9B),
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => Container(
+                              color: const Color(0xFF151521),
+                              height: 300,
+                              child: const Icon(
+                                Icons.broken_image_outlined,
+                                color: Color(0xFFB9B9C3),
+                              ),
+                            ),
+                          ),
+                          // gradient để chữ/overlay sau này nếu cần
+                          Container(
+                            height: 300,
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [Colors.transparent, Color(0xAA000000)],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -129,7 +160,8 @@ class MovieDetailScreen extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black,
+                          color: Color(0xFFEDEDED),
+                          letterSpacing: 0.2,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -139,17 +171,17 @@ class MovieDetailScreen extends StatelessWidget {
                         children: [
                           Text(
                             'Thời lượng: ${movie.duration} phút',
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 14,
-                              color: Colors.grey[600],
+                              color: Color(0xFFB9B9C3),
                             ),
                           ),
                           const SizedBox(width: 16),
                           Text(
                             'Khởi chiếu: ${movie.releaseDate.day}/${movie.releaseDate.month}/${movie.releaseDate.year}',
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 14,
-                              color: Colors.grey[600],
+                              color: Color(0xFFB9B9C3),
                             ),
                           ),
                         ],
@@ -157,25 +189,29 @@ class MovieDetailScreen extends StatelessWidget {
                       const SizedBox(height: 8),
 
                       // Thể loại
+                      const SizedBox(height: 2),
                       Text(
                         'Thể loại: ${movie.genre}',
-                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFFB9B9C3),
+                        ),
                       ),
 
                       const SizedBox(height: 20),
 
-                      // === PHẦN MỚI: VIDEO TRAILER ===
+                      // === VIDEO TRAILER ===
                       if (movie.trailerUrl != null &&
                           movie.trailerUrl!.isNotEmpty)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
+                            const Text(
                               'Trailer:',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.grey[800],
+                                color: Color(0xFFEDEDED),
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -200,13 +236,16 @@ class MovieDetailScreen extends StatelessWidget {
                                 child: Container(
                                   height: 200,
                                   decoration: BoxDecoration(
-                                    color: Colors.black,
+                                    color: const Color(0xFF151521),
                                     borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: const Color(0xFF222230),
+                                    ),
                                   ),
                                   child: const Center(
                                     child: Icon(
                                       Icons.play_arrow,
-                                      color: Colors.white,
+                                      color: Color(0xFFEDEDED),
                                       size: 60,
                                     ),
                                   ),
@@ -216,18 +255,18 @@ class MovieDetailScreen extends StatelessWidget {
                           ],
                         ),
 
-                      // === PHẦN MỚI: GALLERY ẢNH PHIM ===
+                      // === GALLERY ẢNH PHIM ===
                       if (movie.galleryImages != null &&
                           movie.galleryImages!.isNotEmpty)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
+                            const Text(
                               'Hình ảnh:',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.grey[800],
+                                color: Color(0xFFEDEDED),
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -250,10 +289,10 @@ class MovieDetailScreen extends StatelessWidget {
                                         boxShadow: [
                                           BoxShadow(
                                             color: Colors.black.withOpacity(
-                                              0.2,
+                                              0.35,
                                             ),
-                                            blurRadius: 6,
-                                            offset: const Offset(0, 3),
+                                            blurRadius: 10,
+                                            offset: const Offset(0, 6),
                                           ),
                                         ],
                                       ),
@@ -265,14 +304,16 @@ class MovieDetailScreen extends StatelessWidget {
                                           placeholder: (context, url) =>
                                               const Center(
                                                 child:
-                                                    CircularProgressIndicator(),
+                                                    CircularProgressIndicator(
+                                                      color: Color(0xFF8B1E9B),
+                                                    ),
                                               ),
                                           errorWidget: (context, url, error) =>
                                               Container(
-                                                color: Colors.grey[300],
+                                                color: const Color(0xFF151521),
                                                 child: const Icon(
-                                                  Icons.error,
-                                                  color: Colors.grey,
+                                                  Icons.broken_image_outlined,
+                                                  color: Color(0xFFB9B9C3),
                                                 ),
                                               ),
                                         ),
@@ -290,12 +331,12 @@ class MovieDetailScreen extends StatelessWidget {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             'Đạo diễn:',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: Colors.grey[800],
+                              color: Color(0xFFEDEDED),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -313,18 +354,20 @@ class MovieDetailScreen extends StatelessWidget {
                                 placeholder: (context, url) =>
                                     const CircleAvatar(
                                       radius: 30,
-                                      backgroundColor: Colors.grey,
+                                      backgroundColor: Color(0xFF222230),
                                       child: Center(
-                                        child: CircularProgressIndicator(),
+                                        child: CircularProgressIndicator(
+                                          color: Color(0xFF8B1E9B),
+                                        ),
                                       ),
                                     ),
                                 errorWidget: (context, url, error) =>
                                     CircleAvatar(
                                       radius: 30,
-                                      backgroundColor: Colors.grey[300],
+                                      backgroundColor: const Color(0xFF151521),
                                       child: const Icon(
-                                        Icons.error,
-                                        color: Colors.grey,
+                                        Icons.broken_image_outlined,
+                                        color: Color(0xFFB9B9C3),
                                       ),
                                     ),
                               ),
@@ -336,7 +379,7 @@ class MovieDetailScreen extends StatelessWidget {
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(
                                     fontSize: 13,
-                                    color: Colors.black87,
+                                    color: Color(0xFFEDEDED),
                                     fontWeight: FontWeight.w500,
                                   ),
                                   maxLines: 2,
@@ -353,12 +396,12 @@ class MovieDetailScreen extends StatelessWidget {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             'Diễn viên:',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: Colors.grey[800],
+                              color: Color(0xFFEDEDED),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -396,23 +439,33 @@ class MovieDetailScreen extends StatelessWidget {
                                             placeholder: (context, url) =>
                                                 const CircleAvatar(
                                                   radius: 30,
-                                                  backgroundColor: Colors.grey,
+                                                  backgroundColor: Color(
+                                                    0xFF222230,
+                                                  ),
                                                   child: Center(
                                                     child:
-                                                        CircularProgressIndicator(),
+                                                        CircularProgressIndicator(
+                                                          color: Color(
+                                                            0xFF8B1E9B,
+                                                          ),
+                                                        ),
                                                   ),
                                                 ),
                                             errorWidget:
-                                                (context, url, error) =>
-                                                    CircleAvatar(
-                                                      radius: 30,
-                                                      backgroundColor:
-                                                          Colors.grey[300],
-                                                      child: const Icon(
-                                                        Icons.error,
-                                                        color: Colors.grey,
-                                                      ),
-                                                    ),
+                                                (
+                                                  context,
+                                                  url,
+                                                  error,
+                                                ) => CircleAvatar(
+                                                  radius: 30,
+                                                  backgroundColor: const Color(
+                                                    0xFF151521,
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.broken_image_outlined,
+                                                    color: Color(0xFFB9B9C3),
+                                                  ),
+                                                ),
                                           ),
                                           const SizedBox(height: 8),
                                           Text(
@@ -420,7 +473,7 @@ class MovieDetailScreen extends StatelessWidget {
                                             textAlign: TextAlign.center,
                                             style: const TextStyle(
                                               fontSize: 13,
-                                              color: Colors.black87,
+                                              color: Color(0xFFEDEDED),
                                               fontWeight: FontWeight.w500,
                                             ),
                                             maxLines: 2,
@@ -442,7 +495,7 @@ class MovieDetailScreen extends StatelessWidget {
                         movie.description,
                         style: const TextStyle(
                           fontSize: 16,
-                          color: Colors.black87,
+                          color: Color(0xFFEDEDED),
                           height: 1.5,
                         ),
                       ),
@@ -459,15 +512,15 @@ class MovieDetailScreen extends StatelessWidget {
                                     : i - 1 < movie.rating
                                     ? Icons.star_half
                                     : Icons.star_border,
-                                color: Colors.amber,
+                                color: const Color(0xFFFFC107),
                                 size: 20,
                               ),
                             const SizedBox(width: 8),
                             Text(
                               '${movie.rating.toStringAsFixed(1)}/5 (${(1000 * movie.rating).toInt()} đánh giá)',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 14,
-                                color: Colors.grey[600],
+                                color: Color(0xFFB9B9C3),
                               ),
                             ),
                           ],
@@ -481,7 +534,7 @@ class MovieDetailScreen extends StatelessWidget {
             ),
           ),
 
-          // === NÚT MUA VÉ CẢI TIẾN - STICKY BOTTOM ===
+          // === NÚT MUA VÉ - STICKY BOTTOM ===
           if (isNowShowing)
             Positioned(
               left: 0,
@@ -489,14 +542,17 @@ class MovieDetailScreen extends StatelessWidget {
               bottom: 0,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: const Color(0xFF151521),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, -5),
+                      color: Colors.black.withOpacity(0.45),
+                      blurRadius: 16,
+                      offset: const Offset(0, -8),
                     ),
                   ],
+                  border: const Border(
+                    top: BorderSide(color: Color(0xFF222230)),
+                  ),
                 ),
                 padding: const EdgeInsets.all(16.0),
                 child: SafeArea(

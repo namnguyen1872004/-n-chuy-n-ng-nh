@@ -71,8 +71,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _fetchProfileData() async {
     try {
       final snapshot = await _database.child('users/user1/profile').get();
-      print("Profile snapshot exists: ${snapshot.exists}"); // Debug
-      print("Profile snapshot value: ${snapshot.value}"); // Debug
+      print("Profile snapshot exists: ${snapshot.exists}");
+      print("Profile snapshot value: ${snapshot.value}");
       if (snapshot.exists) {
         final data = snapshot.value as Map<dynamic, dynamic>;
         setState(() {
@@ -110,8 +110,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _fetchTransactions() async {
     try {
       final snapshot = await _database.child('users/user1/transactions').get();
-      print("Transactions snapshot exists: ${snapshot.exists}"); // Debug
-      print("Transactions snapshot value: ${snapshot.value}"); // Debug
+      print("Transactions snapshot exists: ${snapshot.exists}");
+      print("Transactions snapshot value: ${snapshot.value}");
       if (snapshot.exists) {
         final data = snapshot.value as Map<dynamic, dynamic>?;
         if (data != null) {
@@ -145,32 +145,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    print(
-      "userProfile: $userProfile, recentTransactions: $recentTransactions",
-    ); // Debug
+    print("userProfile: $userProfile, recentTransactions: $recentTransactions");
     if (isLoading) {
       return Scaffold(
-        backgroundColor: Colors.white,
-        body: const Center(child: CircularProgressIndicator()),
+        backgroundColor: const Color(0xFF0B0B0F),
+        body: const Center(
+          child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
+        ),
       );
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF0B0B0F),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF0B0B0F),
         elevation: 0,
         title: Text(
           'Tài khoản',
           style: GoogleFonts.roboto(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: Colors.black,
+            color: const Color(0xFFEDEDED),
+            letterSpacing: 0.2,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.notifications, color: Colors.black),
+            icon: const Icon(Icons.notifications, color: Color(0xFFEDEDED)),
             onPressed: () {
               // TODO: Mở thông báo
             },
@@ -185,13 +186,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: const Color(0xFF151521),
+                border: const Border(
+                  bottom: BorderSide(color: Color(0xFF222230)),
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
-                    spreadRadius: 1,
-                    blurRadius: 5,
-                    offset: const Offset(0, 2),
+                    color: Colors.black.withOpacity(0.45),
+                    blurRadius: 16,
+                    offset: const Offset(0, 8),
                   ),
                 ],
               ),
@@ -234,7 +237,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     style: GoogleFonts.roboto(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                      color: const Color(0xFFEDEDED),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -242,7 +245,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     userProfile?.phone ?? 'Unknown',
                     style: GoogleFonts.roboto(
                       fontSize: 16,
-                      color: Colors.grey[600],
+                      color: const Color(0xFFB9B9C3),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -253,7 +256,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF5F5F5),
+                      color: const Color(0xFF1C1C28),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: const Color(0xFF8B1E9B),
@@ -274,7 +277,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           style: GoogleFonts.roboto(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
-                            color: const Color(0xFF8B1E9B),
+                            color: const Color(0xFFEDEDED),
                           ),
                         ),
                       ],
@@ -295,7 +298,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     icon: Icons.history,
                     title: 'Lịch sử giao dịch',
                     onTap: () {
-                      // TODO: Mở lịch sử giao dịch
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Mở lịch sử giao dịch')),
                       );
@@ -305,7 +307,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     icon: Icons.confirmation_number,
                     title: 'Quản lý vé',
                     onTap: () {
-                      // TODO: Mở quản lý vé
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Mở quản lý vé')),
                       );
@@ -315,7 +316,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     icon: Icons.local_offer,
                     title: 'Ưu đãi cá nhân',
                     onTap: () {
-                      // TODO: Mở ưu đãi
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Mở ưu đãi cá nhân')),
                       );
@@ -325,7 +325,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     icon: Icons.settings,
                     title: 'Cài đặt',
                     onTap: () {
-                      // TODO: Mở cài đặt
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Mở cài đặt')),
                       );
@@ -335,7 +334,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     icon: Icons.logout,
                     title: 'Đăng xuất',
                     onTap: () {
-                      // TODO: Đăng xuất
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Đăng xuất')),
                       );
@@ -358,7 +356,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     style: GoogleFonts.roboto(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                      color: const Color(0xFFEDEDED),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -382,6 +380,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF151521),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF222230)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.35),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -394,10 +404,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF5F5F5),
+                    color: const Color(0xFF1C1C28),
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF222230)),
                   ),
-                  child: Icon(icon, color: const Color(0xFF8B1E9B)),
+                  child: const Icon(Icons.history, color: Color(0xFF8B1E9B)),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -406,14 +417,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     style: GoogleFonts.roboto(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
-                      color: Colors.black,
+                      color: const Color(0xFFEDEDED),
                     ),
                   ),
                 ),
                 const Icon(
                   Icons.arrow_forward_ios,
                   size: 16,
-                  color: Colors.grey,
+                  color: Color(0xFFB9B9C3),
                 ),
               ],
             ),
@@ -429,14 +440,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF151521),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF222230)),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.35),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -445,8 +456,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF8B1E9B).withOpacity(0.1),
+              color: const Color(0xFF1C1C28),
               borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF222230)),
             ),
             child: const Icon(
               Icons.confirmation_number,
@@ -463,14 +475,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: GoogleFonts.roboto(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: Colors.black,
+                    color: const Color(0xFFEDEDED),
                   ),
                 ),
                 Text(
                   transaction.date,
                   style: GoogleFonts.roboto(
                     fontSize: 12,
-                    color: Colors.grey[600],
+                    color: const Color(0xFFB9B9C3),
                   ),
                 ),
               ],
@@ -484,7 +496,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 style: GoogleFonts.roboto(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
+                  color: const Color(0xFFEDEDED),
                 ),
               ),
               Text(
@@ -492,8 +504,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 style: GoogleFonts.roboto(
                   fontSize: 12,
                   color: transaction.status == 'Đã thanh toán'
-                      ? Colors.green
-                      : Colors.orange,
+                      ? const Color(0xFF6DD17A)
+                      : const Color(0xFFFFC861),
                 ),
               ),
             ],

@@ -186,8 +186,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     if (isLoading) {
       return Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(
+        backgroundColor: const Color(0xFF0B0B0F),
+        body: const Center(
           child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
         ),
       );
@@ -202,21 +202,22 @@ class _HomeScreenState extends State<HomeScreen> {
           ..sort((a, b) => a.releaseDate.compareTo(b.releaseDate));
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF0B0B0F),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF0B0B0F),
         elevation: 0,
         title: const Text(
           'PhimHay.net',
           style: TextStyle(
-            color: Colors.black,
+            color: Color(0xFFEDEDED),
             fontWeight: FontWeight.bold,
             fontSize: 24,
+            letterSpacing: 0.3,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search, color: Colors.black),
+            icon: const Icon(Icons.search, color: Color(0xFFEDEDED)),
             onPressed: () {
               print('Mở tìm kiếm từ icon');
               showSearch(
@@ -238,18 +239,34 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               child: TextField(
                 controller: _searchController,
+                style: const TextStyle(color: Color(0xFFEDEDED)),
+                cursorColor: const Color(0xFF8B1E9B),
                 decoration: InputDecoration(
                   hintText: 'Tìm phim, rạp chiếu...',
-                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  hintStyle: const TextStyle(color: Color(0xFFB9B9C3)),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: Color(0xFFB9B9C3),
+                  ),
                   filled: true,
-                  fillColor: Colors.grey[100],
+                  fillColor: const Color(0xFF151521),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF8B1E9B),
+                      width: 1,
+                    ),
+                  ),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.clear, color: Colors.grey),
+                          icon: const Icon(
+                            Icons.clear,
+                            color: Color(0xFFB9B9C3),
+                          ),
                           onPressed: () {
                             setState(() {
                               _searchController.clear();
@@ -303,9 +320,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
+                                color: Colors.black.withOpacity(0.5),
+                                blurRadius: 18,
+                                offset: const Offset(0, 12),
                               ),
                             ],
                           ),
@@ -318,40 +335,88 @@ class _HomeScreenState extends State<HomeScreen> {
                                   imageUrl: movie.posterUrl,
                                   fit: BoxFit.cover,
                                   placeholder: (context, url) => const Center(
-                                    child: CircularProgressIndicator(),
+                                    child: CircularProgressIndicator(
+                                      color: Color(0xFF8B1E9B),
+                                    ),
                                   ),
                                   errorWidget: (context, url, error) =>
                                       Container(
-                                        color: Colors.red[100],
+                                        color: const Color(0xFF151521),
                                         child: const Icon(
-                                          Icons.error,
-                                          color: Colors.red,
+                                          Icons.broken_image_outlined,
+                                          color: Color(0xFFB9B9C3),
                                         ),
                                       ),
                                 ),
-                                Positioned(
-                                  bottom: 8,
-                                  left: 8,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    color: Colors.black54,
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.star,
-                                          color: Colors.amber,
-                                          size: 16,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          '${movie.rating.toStringAsFixed(1)}',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 14,
-                                          ),
-                                        ),
+                                // Gradient để chữ/điểm nhấn nổi trên poster
+                                Container(
+                                  decoration: const BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.transparent,
+                                        Color(0xAA000000),
                                       ],
                                     ),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 10,
+                                  left: 10,
+                                  right: 10,
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          movie.title,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Color(0xFFEDEDED),
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.2,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withOpacity(0.55),
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.white12,
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.star_rounded,
+                                              color: Color(0xFFFFC107),
+                                              size: 16,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              movie.rating.toStringAsFixed(1),
+                                              style: const TextStyle(
+                                                color: Color(0xFFEDEDED),
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
@@ -374,7 +439,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
+                  color: Color(0xFFEDEDED),
+                  letterSpacing: 0.2,
                 ),
               ),
             ),
@@ -411,9 +477,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 borderRadius: BorderRadius.circular(8),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
+                                    color: Colors.black.withOpacity(0.45),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 8),
                                   ),
                                 ],
                               ),
@@ -427,14 +493,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                       fit: BoxFit.cover,
                                       placeholder: (context, url) =>
                                           const Center(
-                                            child: CircularProgressIndicator(),
+                                            child: CircularProgressIndicator(
+                                              color: Color(0xFF8B1E9B),
+                                            ),
                                           ),
                                       errorWidget: (context, url, error) =>
                                           Container(
-                                            color: Colors.red[100],
+                                            color: const Color(0xFF151521),
                                             child: const Icon(
-                                              Icons.error,
-                                              color: Colors.red,
+                                              Icons.broken_image_outlined,
+                                              color: Color(0xFFB9B9C3),
                                             ),
                                           ),
                                     ),
@@ -442,21 +510,34 @@ class _HomeScreenState extends State<HomeScreen> {
                                       bottom: 8,
                                       left: 8,
                                       child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        color: Colors.black54,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withOpacity(0.55),
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.white12,
+                                            width: 1,
+                                          ),
+                                        ),
                                         child: Row(
                                           children: [
                                             const Icon(
-                                              Icons.star,
-                                              color: Colors.amber,
+                                              Icons.star_rounded,
+                                              color: Color(0xFFFFC107),
                                               size: 14,
                                             ),
-                                            const SizedBox(width: 2),
+                                            const SizedBox(width: 4),
                                             Text(
                                               '${movie.rating.toStringAsFixed(1)}',
                                               style: const TextStyle(
-                                                color: Colors.white,
+                                                color: Color(0xFFEDEDED),
                                                 fontSize: 12,
+                                                fontWeight: FontWeight.w600,
                                               ),
                                             ),
                                           ],
@@ -490,6 +571,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 0.5,
+                                  color: Color(0xFFEDEDED),
                                 ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -514,7 +596,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black,
+                  color: Color(0xFFEDEDED),
+                  letterSpacing: 0.2,
                 ),
               ),
             ),
@@ -551,9 +634,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 borderRadius: BorderRadius.circular(8),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
+                                    color: Colors.black.withOpacity(0.45),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 8),
                                   ),
                                 ],
                               ),
@@ -565,14 +648,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                   width: 130,
                                   fit: BoxFit.cover,
                                   placeholder: (context, url) => const Center(
-                                    child: CircularProgressIndicator(),
+                                    child: CircularProgressIndicator(
+                                      color: Color(0xFF8B1E9B),
+                                    ),
                                   ),
                                   errorWidget: (context, url, error) =>
                                       Container(
-                                        color: Colors.red[100],
+                                        color: const Color(0xFF151521),
                                         child: const Icon(
-                                          Icons.error,
-                                          color: Colors.red,
+                                          Icons.broken_image_outlined,
+                                          color: Color(0xFFB9B9C3),
                                         ),
                                       ),
                                 ),
@@ -601,6 +686,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 0.5,
+                                  color: Color(0xFFEDEDED),
                                 ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -648,13 +734,13 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
         currentIndex: _selectedIndex,
         selectedItemColor: const Color(0xFF8B1E9B),
-        unselectedItemColor: Colors.grey,
+        unselectedItemColor: const Color(0xFFB9B9C3),
         selectedLabelStyle: const TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.bold,
         ),
         unselectedLabelStyle: const TextStyle(fontSize: 10),
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF151521),
         type: BottomNavigationBarType.fixed,
         showSelectedLabels: true,
         showUnselectedLabels: true,
@@ -678,7 +764,7 @@ class MovieSearchDelegate extends SearchDelegate<String> {
   List<Widget> buildActions(BuildContext context) {
     return [
       IconButton(
-        icon: const Icon(Icons.clear),
+        icon: const Icon(Icons.clear, color: Color(0xFFEDEDED)),
         onPressed: () {
           query = '';
           showSuggestions(context);
@@ -690,7 +776,7 @@ class MovieSearchDelegate extends SearchDelegate<String> {
   @override
   Widget buildLeading(BuildContext context) {
     return IconButton(
-      icon: const Icon(Icons.arrow_back),
+      icon: const Icon(Icons.arrow_back, color: Color(0xFFEDEDED)),
       onPressed: () {
         close(context, '');
       },
@@ -705,7 +791,7 @@ class MovieSearchDelegate extends SearchDelegate<String> {
       return const Center(
         child: Text(
           'Không tìm thấy phim nào',
-          style: TextStyle(fontSize: 18, color: Colors.grey),
+          style: TextStyle(fontSize: 18, color: Color(0xFFB9B9C3)),
         ),
       );
     }
@@ -714,23 +800,47 @@ class MovieSearchDelegate extends SearchDelegate<String> {
       itemBuilder: (context, index) {
         final movie = results[index];
         return ListTile(
+          tileColor: const Color(0xFF0B0B0F),
           leading: CachedNetworkImage(
             imageUrl: movie.posterUrl,
             width: 50,
             height: 75,
             fit: BoxFit.cover,
-            placeholder: (context, url) =>
-                const Center(child: CircularProgressIndicator()),
+            placeholder: (context, url) => const Center(
+              child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
+            ),
             errorWidget: (context, url, error) => Container(
-              color: Colors.red[100],
-              child: const Icon(Icons.error, color: Colors.red),
+              color: const Color(0xFF151521),
+              child: const Icon(
+                Icons.broken_image_outlined,
+                color: Color(0xFFB9B9C3),
+              ),
             ),
           ),
-          title: Text(movie.title),
+          title: Text(
+            movie.title,
+            style: const TextStyle(color: Color(0xFFEDEDED)),
+          ),
+
           subtitle: Text(
             'Đạo diễn: ${movie.director} | Diễn viên: ${movie.actors.join(', ')}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Color(0xFFB9B9C3)),
+          ),
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white10,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              movie.rating.toStringAsFixed(1),
+              style: const TextStyle(
+                color: Color(0xFFEDEDED),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
           onTap: () {
             Navigator.pushNamed(context, '/details', arguments: movie)
@@ -754,7 +864,7 @@ class MovieSearchDelegate extends SearchDelegate<String> {
       return const Center(
         child: Text(
           'Không tìm thấy gợi ý nào',
-          style: TextStyle(fontSize: 18, color: Colors.grey),
+          style: TextStyle(fontSize: 18, color: Color(0xFFB9B9C3)),
         ),
       );
     }
@@ -763,23 +873,32 @@ class MovieSearchDelegate extends SearchDelegate<String> {
       itemBuilder: (context, index) {
         final movie = suggestions[index];
         return ListTile(
+          tileColor: const Color(0xFF0B0B0F),
           leading: CachedNetworkImage(
             imageUrl: movie.posterUrl,
             width: 50,
             height: 75,
             fit: BoxFit.cover,
-            placeholder: (context, url) =>
-                const Center(child: CircularProgressIndicator()),
+            placeholder: (context, url) => const Center(
+              child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
+            ),
             errorWidget: (context, url, error) => Container(
-              color: Colors.red[100],
-              child: const Icon(Icons.error, color: Colors.red),
+              color: const Color(0xFF151521),
+              child: const Icon(
+                Icons.broken_image_outlined,
+                color: Color(0xFFB9B9C3),
+              ),
             ),
           ),
-          title: Text(movie.title),
+          title: Text(
+            movie.title,
+            style: const TextStyle(color: Color(0xFFEDEDED)),
+          ),
           subtitle: Text(
             'Đạo diễn: ${movie.director} | Diễn viên: ${movie.actors.join(', ')}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Color(0xFFB9B9C3)),
           ),
           onTap: () {
             query = movie.title;

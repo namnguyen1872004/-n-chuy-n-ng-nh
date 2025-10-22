@@ -231,16 +231,17 @@ class _CinemaShowtimesScreenState extends State<MovieSelectionScreen> {
     final today = DateTime(now.year, now.month, now.day);
 
     return Scaffold(
+      backgroundColor: const Color(0xFF0B0B0F),
       body: SafeArea(
         child: Column(
           children: [
-            // Header
+            // Header (gradient tối)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFFFF80B5), Color(0xFFFFB3D1)],
+                  colors: [Color(0xFF11111A), Color(0xFF151521)],
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                 ),
@@ -248,22 +249,26 @@ class _CinemaShowtimesScreenState extends State<MovieSelectionScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+                    icon: const Icon(
+                      Icons.arrow_back_ios,
+                      color: Color(0xFFEDEDED),
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                   Expanded(
                     child: Text(
                       widget.cinema.name,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: Color(0xFFEDEDED),
                         fontWeight: FontWeight.w700,
                         fontSize: 20,
+                        letterSpacing: 0.2,
                       ),
                     ),
                   ),
-                  const Icon(Icons.support_agent, color: Colors.white),
+                  const Icon(Icons.support_agent, color: Color(0xFFEDEDED)),
                   const SizedBox(width: 12),
-                  const Icon(Icons.close, color: Colors.white),
+                  const Icon(Icons.close, color: Color(0xFFEDEDED)),
                 ],
               ),
             ),
@@ -290,14 +295,18 @@ class _CinemaShowtimesScreenState extends State<MovieSelectionScreen> {
                           Text(
                             '${d.day}/${d.month}',
                             style: TextStyle(
-                              color: sel ? Colors.white : Colors.black87,
+                              color: sel
+                                  ? Colors.white
+                                  : const Color(0xFFEDEDED),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           Text(
                             d == today ? 'H.nay' : _weekday(d),
                             style: TextStyle(
-                              color: sel ? Colors.white : Colors.black54,
+                              color: sel
+                                  ? Colors.white70
+                                  : const Color(0xFFB9B9C3),
                             ),
                           ),
                         ],
@@ -312,10 +321,19 @@ class _CinemaShowtimesScreenState extends State<MovieSelectionScreen> {
                         if (!mounted) return;
                         setState(() => loading = false);
                       },
-                      selectedColor: const Color(0xFFFF4D94),
-                      backgroundColor: const Color(0xFFF2F2F2),
+                      selectedColor: const Color(0xFF8B1E9B),
+                      backgroundColor: const Color(0xFF151521),
                       shape: RoundedRectangleBorder(
+                        side: BorderSide(
+                          color: sel
+                              ? const Color(0xFF8B1E9B)
+                              : const Color(0xFF222230),
+                        ),
                         borderRadius: BorderRadius.circular(12),
+                      ),
+                      labelPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
                       ),
                     ),
                   );
@@ -334,15 +352,23 @@ class _CinemaShowtimesScreenState extends State<MovieSelectionScreen> {
                 itemBuilder: (_, i) {
                   final sel = i == selectedSlot;
                   return ChoiceChip(
-                    label: Text(slotLabels[i]),
+                    label: Text(
+                      slotLabels[i],
+                      style: TextStyle(
+                        color: sel ? Colors.white : const Color(0xFFEDEDED),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     selected: sel,
                     onSelected: (_) => setState(() => selectedSlot = i),
-                    selectedColor: const Color(0xFFFF4D94),
-                    labelStyle: TextStyle(
-                      color: sel ? Colors.white : Colors.black87,
-                    ),
-                    backgroundColor: const Color(0xFFF2F2F2),
+                    selectedColor: const Color(0xFF8B1E9B),
+                    backgroundColor: const Color(0xFF151521),
                     shape: RoundedRectangleBorder(
+                      side: BorderSide(
+                        color: sel
+                            ? const Color(0xFF8B1E9B)
+                            : const Color(0xFF222230),
+                      ),
                       borderRadius: BorderRadius.circular(24),
                     ),
                   );
@@ -360,7 +386,8 @@ class _CinemaShowtimesScreenState extends State<MovieSelectionScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: Colors.grey,
+                    color: Color(0xFFB9B9C3),
+                    letterSpacing: 1.1,
                   ),
                 ),
               ),
@@ -368,7 +395,11 @@ class _CinemaShowtimesScreenState extends State<MovieSelectionScreen> {
 
             Expanded(
               child: loading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF8B1E9B),
+                      ),
+                    )
                   : ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                       itemBuilder: (_, i) {
@@ -492,10 +523,14 @@ class _MovieMoMoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: Colors.white,
+        color: Color(0xFF151521),
         borderRadius: BorderRadius.all(Radius.circular(12)),
         boxShadow: [
-          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black45,
+            blurRadius: 14,
+            offset: Offset(0, 8),
+          ),
         ],
       ),
       padding: const EdgeInsets.all(12),
@@ -510,6 +545,7 @@ class _MovieMoMoCard extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
+                    color: Color(0xFFEDEDED),
                   ),
                 ),
               ),
@@ -517,13 +553,16 @@ class _MovieMoMoCard extends StatelessWidget {
                 onPressed: () {
                   /* TODO: chi tiết */
                 },
-                child: const Text('Chi tiết'),
+                child: const Text(
+                  'Chi tiết',
+                  style: TextStyle(color: Color(0xFF8B1E9B)),
+                ),
               ),
             ],
           ),
           Text(
             '${movie.genre} | ${movie.duration} phút',
-            style: const TextStyle(color: Colors.black54),
+            style: const TextStyle(color: Color(0xFFB9B9C3)),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -541,16 +580,37 @@ class _MovieMoMoCard extends StatelessWidget {
                       width: 112,
                       height: 160,
                       fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) =>
-                          const Icon(Icons.movie, size: 64),
+                      placeholder: (_, __) => Container(
+                        width: 112,
+                        height: 160,
+                        color: const Color(0xFF222230),
+                        child: const Center(
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Color(0xFF8B1E9B),
+                            ),
+                          ),
+                        ),
+                      ),
+                      errorWidget: (_, __, ___) => const Icon(
+                        Icons.movie,
+                        size: 64,
+                        color: Color(0xFFB9B9C3),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),
                   const Row(
                     children: [
-                      Icon(Icons.ondemand_video, color: Colors.pink),
+                      Icon(Icons.ondemand_video, color: Color(0xFF8B1E9B)),
                       SizedBox(width: 6),
-                      Text('Trailer', style: TextStyle(color: Colors.pink)),
+                      Text(
+                        'Trailer',
+                        style: TextStyle(color: Color(0xFF8B1E9B)),
+                      ),
                     ],
                   ),
                 ],
@@ -568,19 +628,23 @@ class _MovieMoMoCard extends StatelessWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.black12,
+                          color: const Color(0xFF1C1C28),
+                          border: Border.all(color: const Color(0xFF222230)),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           '${showtimes.first.format} ${showtimes.first.subtitle}',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFEDEDED),
+                          ),
                         ),
                       ),
                     const SizedBox(height: 10),
                     if (showtimes.isEmpty)
                       const Text(
                         'Không có suất chiếu trong khung giờ này.',
-                        style: TextStyle(color: Colors.grey),
+                        style: TextStyle(color: Color(0xFFB9B9C3)),
                       ),
                     if (showtimes.isNotEmpty)
                       LayoutBuilder(
@@ -598,9 +662,9 @@ class _MovieMoMoCard extends StatelessWidget {
                                   child: Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      color: Colors.white,
+                                      color: const Color(0xFF1C1C28),
                                       border: Border.all(
-                                        color: const Color(0xFFEAEAEA),
+                                        color: const Color(0xFF222230),
                                       ),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
@@ -619,13 +683,14 @@ class _MovieMoMoCard extends StatelessWidget {
                                                 style: const TextStyle(
                                                   fontSize: 18,
                                                   fontWeight: FontWeight.w800,
+                                                  color: Color(0xFFEDEDED),
                                                 ),
                                               ),
                                               const SizedBox(width: 6),
                                               Text(
                                                 '~${_fmt(s.end)}',
                                                 style: const TextStyle(
-                                                  color: Colors.black45,
+                                                  color: Color(0xFFB9B9C3),
                                                 ),
                                               ),
                                             ],
@@ -635,7 +700,7 @@ class _MovieMoMoCard extends StatelessWidget {
                                         Text(
                                           'Còn ${s.available}/${s.total}',
                                           style: const TextStyle(
-                                            color: Colors.black54,
+                                            color: Color(0xFFB9B9C3),
                                           ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,

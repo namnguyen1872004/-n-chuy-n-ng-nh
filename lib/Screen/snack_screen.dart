@@ -32,23 +32,24 @@ class _SnackScreenState extends State<SnackScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF0B0B0F),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF0B0B0F),
         elevation: 0,
         title: const Text(
           'Bắp Nước',
           style: TextStyle(
-            color: Colors.black,
+            color: Color(0xFFEDEDED),
             fontWeight: FontWeight.bold,
             fontSize: 20,
+            letterSpacing: 0.2,
           ),
         ),
         actions: [
           Stack(
             children: [
               IconButton(
-                icon: const Icon(Icons.shopping_cart, color: Colors.black),
+                icon: const Icon(Icons.shopping_cart, color: Color(0xFFEDEDED)),
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -64,7 +65,7 @@ class _SnackScreenState extends State<SnackScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(2),
                     decoration: const BoxDecoration(
-                      color: Colors.red,
+                      color: Color(0xFFEF4444),
                       shape: BoxShape.circle,
                     ),
                     constraints: const BoxConstraints(
@@ -91,21 +92,29 @@ class _SnackScreenState extends State<SnackScreen> {
               if (snapshot.hasError) {
                 return Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Text('Lỗi: ${snapshot.error}'),
+                  child: Text(
+                    'Lỗi: ${snapshot.error}',
+                    style: const TextStyle(color: Color(0xFFEDEDED)),
+                  ),
                 );
               }
 
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Padding(
                   padding: EdgeInsets.all(16.0),
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Center(
+                    child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
+                  ),
                 );
               }
 
               if (!snapshot.hasData || snapshot.data!.snapshot.value == null) {
                 return const Padding(
                   padding: EdgeInsets.all(16.0),
-                  child: Text('Không có dữ liệu rạp trong Firebase!'),
+                  child: Text(
+                    'Không có dữ liệu rạp trong Firebase!',
+                    style: TextStyle(color: Color(0xFFB9B9C3)),
+                  ),
                 );
               }
 
@@ -130,28 +139,48 @@ class _SnackScreenState extends State<SnackScreen> {
 
               return Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: DropdownButton<String>(
-                  value: selectedCinemaId,
-                  hint: const Text('Chọn rạp'),
-                  items: cinemasMap.entries.map((entry) {
-                    final cinemaData = Map<String, dynamic>.from(entry.value);
-                    return DropdownMenuItem<String>(
-                      value: entry.key,
-                      child: Text(cinemaData['name'] ?? 'Không có tên'),
-                    );
-                  }).toList(),
-                  onChanged: (String? newValue) {
-                    if (newValue != null) {
-                      setState(() {
-                        selectedCinemaId = newValue;
-                      });
-                    }
-                  },
-                  isExpanded: true,
-                  underline: const SizedBox(),
-                  style: const TextStyle(color: Colors.black, fontSize: 16),
-                  dropdownColor: Colors.white,
-                  icon: const Icon(Icons.arrow_drop_down, color: Colors.black),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF151521),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF222230)),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: DropdownButton<String>(
+                    value: selectedCinemaId,
+                    hint: const Text(
+                      'Chọn rạp',
+                      style: TextStyle(color: Color(0xFFB9B9C3)),
+                    ),
+                    items: cinemasMap.entries.map((entry) {
+                      final cinemaData = Map<String, dynamic>.from(entry.value);
+                      return DropdownMenuItem<String>(
+                        value: entry.key,
+                        child: Text(
+                          cinemaData['name'] ?? 'Không có tên',
+                          style: const TextStyle(color: Color(0xFFEDEDED)),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (String? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          selectedCinemaId = newValue;
+                        });
+                      }
+                    },
+                    isExpanded: true,
+                    underline: const SizedBox(),
+                    style: const TextStyle(
+                      color: Color(0xFFEDEDED),
+                      fontSize: 16,
+                    ),
+                    dropdownColor: const Color(0xFF151521),
+                    icon: const Icon(
+                      Icons.arrow_drop_down,
+                      color: Color(0xFFEDEDED),
+                    ),
+                  ),
                 ),
               );
             },
@@ -164,14 +193,25 @@ class _SnackScreenState extends State<SnackScreen> {
               vertical: 8.0,
             ),
             child: TextField(
+              style: const TextStyle(color: Color(0xFFEDEDED)),
+              cursorColor: const Color(0xFF8B1E9B),
               decoration: InputDecoration(
                 hintText: 'Tìm bắp nước...',
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                hintStyle: const TextStyle(color: Color(0xFFB9B9C3)),
+                prefixIcon: const Icon(Icons.search, color: Color(0xFFB9B9C3)),
                 filled: true,
-                fillColor: Colors.grey[100],
+                fillColor: const Color(0xFF151521),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+                  borderSide: const BorderSide(color: Color(0xFF222230)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF222230)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF8B1E9B)),
                 ),
               ),
               onChanged: (value) {
@@ -203,24 +243,41 @@ class _SnackScreenState extends State<SnackScreen> {
           // --- Danh sách snack ---
           Expanded(
             child: selectedCinemaId.isEmpty
-                ? const Center(child: Text('Hãy chọn một rạp để xem bắp nước'))
+                ? const Center(
+                    child: Text(
+                      'Hãy chọn một rạp để xem bắp nước',
+                      style: TextStyle(color: Color(0xFFB9B9C3)),
+                    ),
+                  )
                 : StreamBuilder<DatabaseEvent>(
                     stream: _database
                         .child('cinemas/$selectedCinemaId/snacks')
                         .onValue,
                     builder: (context, snapshot) {
                       if (snapshot.hasError) {
-                        return Center(child: Text('Lỗi: ${snapshot.error}'));
+                        return Center(
+                          child: Text(
+                            'Lỗi: ${snapshot.error}',
+                            style: const TextStyle(color: Color(0xFFEDEDED)),
+                          ),
+                        );
                       }
 
                       if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF8B1E9B),
+                          ),
+                        );
                       }
 
                       if (!snapshot.hasData ||
                           snapshot.data!.snapshot.value == null) {
                         return const Center(
-                          child: Text('Không có dữ liệu bắp nước'),
+                          child: Text(
+                            'Không có dữ liệu bắp nước',
+                            style: TextStyle(color: Color(0xFFB9B9C3)),
+                          ),
                         );
                       }
 
@@ -271,7 +328,10 @@ class _SnackScreenState extends State<SnackScreen> {
 
                       if (filteredSnacks.isEmpty) {
                         return const Center(
-                          child: Text('Không có sản phẩm phù hợp'),
+                          child: Text(
+                            'Không có sản phẩm phù hợp',
+                            style: TextStyle(color: Color(0xFFB9B9C3)),
+                          ),
                         );
                       }
 
@@ -299,30 +359,50 @@ class _SnackScreenState extends State<SnackScreen> {
   }
 
   Widget _buildFilterChip(String label, String value) {
+    final bool selected = filter == value;
     return Padding(
       padding: const EdgeInsets.only(right: 8.0),
       child: ChoiceChip(
-        label: Text(label),
-        selected: filter == value,
-        onSelected: (selected) {
+        label: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: selected ? Colors.white : const Color(0xFFEDEDED),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        selected: selected,
+        onSelected: (s) {
           setState(() {
             filter = value;
           });
         },
-        backgroundColor: Colors.grey[200],
+        backgroundColor: const Color(0xFF151521),
         selectedColor: const Color(0xFF8B1E9B),
-        labelStyle: TextStyle(
-          fontSize: 12,
-          color: filter == value ? Colors.white : Colors.black,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(
+            color: selected ? const Color(0xFF8B1E9B) : const Color(0xFF222230),
+          ),
+          borderRadius: BorderRadius.circular(24),
         ),
       ),
     );
   }
 
   Widget _buildSnackCard(Snack snack) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF151521),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF222230)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.35),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -335,13 +415,13 @@ class _SnackScreenState extends State<SnackScreen> {
               fit: BoxFit.cover,
               placeholder: (context, url) => Container(
                 height: 120,
-                color: Colors.grey[300],
-                child: const Icon(Icons.fastfood, color: Colors.grey),
+                color: const Color(0xFF222230),
+                child: const Icon(Icons.fastfood, color: Color(0xFFB9B9C3)),
               ),
               errorWidget: (context, url, error) => Container(
                 height: 120,
-                color: Colors.grey[300],
-                child: const Icon(Icons.fastfood, color: Colors.grey),
+                color: const Color(0xFF222230),
+                child: const Icon(Icons.fastfood, color: Color(0xFFB9B9C3)),
               ),
             ),
           ),
@@ -355,7 +435,7 @@ class _SnackScreenState extends State<SnackScreen> {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black,
+                    color: Color(0xFFEDEDED),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -363,7 +443,10 @@ class _SnackScreenState extends State<SnackScreen> {
                 const SizedBox(height: 4),
                 Text(
                   snack.description,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFFB9B9C3),
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -375,7 +458,7 @@ class _SnackScreenState extends State<SnackScreen> {
                       '${snack.price}k VNĐ',
                       style: const TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                         color: Color(0xFF8B1E9B),
                       ),
                     ),
@@ -386,11 +469,12 @@ class _SnackScreenState extends State<SnackScreen> {
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
-                          vertical: 4,
+                          vertical: 6,
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
+                        elevation: 0,
                       ),
                       child: const Text('Thêm', style: TextStyle(fontSize: 12)),
                     ),

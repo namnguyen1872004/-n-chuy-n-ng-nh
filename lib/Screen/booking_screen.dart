@@ -24,9 +24,6 @@ class _BookingScreenState extends State<BookingScreen> {
   // ======= DỮ LIỆU CHUNG =======
 
   // Các mốc giờ chuẩn — giống MovieSelectionScreen (demo)
-  // MovieSelectionScreen dùng các cặp giờ start/end như:
-  // 08:40~10:57, 09:40~11:57, 10:10~12:27, ...
-  // Ở Booking chỉ cần hiển thị giờ bắt đầu cho đồng bộ UI.
   static const List<String> _momoSlots = [
     '08:40',
     '09:40',
@@ -60,7 +57,7 @@ class _BookingScreenState extends State<BookingScreen> {
     (i) => DateTime(2025, 10, 18).add(Duration(days: i)),
   );
 
-  // Danh sách rạp (KHÔNG gắn showtimes tại đây nữa để đồng bộ giờ)
+  // Danh sách rạp
   final List<Map<String, dynamic>> availableCinemas = [
     {
       'name': 'CGV Vincom Mega Mall',
@@ -112,20 +109,21 @@ class _BookingScreenState extends State<BookingScreen> {
     final List<TimeOfDay> times = _momoSlots.map(_parseTimeOfDay).toList();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF0B0B0F),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF0B0B0F),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back, color: Color(0xFFEDEDED)),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           widget.movie.title,
           style: const TextStyle(
-            color: Colors.black,
+            color: Color(0xFFEDEDED),
             fontWeight: FontWeight.bold,
             fontSize: 20,
+            letterSpacing: 0.2,
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -140,13 +138,13 @@ class _BookingScreenState extends State<BookingScreen> {
             Container(
               padding: const EdgeInsets.all(12.0),
               decoration: BoxDecoration(
-                color: Colors.grey[50],
+                color: const Color(0xFF151521),
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
+                    color: Colors.black.withOpacity(0.45),
+                    blurRadius: 16,
+                    offset: const Offset(0, 10),
                   ),
                 ],
               ),
@@ -155,20 +153,28 @@ class _BookingScreenState extends State<BookingScreen> {
                 children: [
                   const Text(
                     'Đặt vé xem phim',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFEDEDED),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     widget.movie.title,
                     style: const TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFEDEDED),
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '${widget.movie.genre} | ${widget.movie.duration} phút',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFFB9B9C3),
+                    ),
                   ),
                 ],
               ),
@@ -178,7 +184,11 @@ class _BookingScreenState extends State<BookingScreen> {
             // Chọn ngày
             const Text(
               'Chọn ngày',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFFEDEDED),
+              ),
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -207,13 +217,19 @@ class _BookingScreenState extends State<BookingScreen> {
                       decoration: BoxDecoration(
                         color: isSelected
                             ? const Color(0xFF8B1E9B)
-                            : Colors.white,
+                            : const Color(0xFF151521),
                         borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected
+                              ? const Color(0xFF8B1E9B)
+                              : const Color(0xFF222230),
+                          width: 1,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
+                            color: Colors.black.withOpacity(0.35),
+                            blurRadius: 10,
+                            offset: const Offset(0, 6),
                           ),
                         ],
                       ),
@@ -227,7 +243,9 @@ class _BookingScreenState extends State<BookingScreen> {
                               fontWeight: isSelected
                                   ? FontWeight.bold
                                   : FontWeight.w500,
-                              color: isSelected ? Colors.white : Colors.black87,
+                              color: isSelected
+                                  ? Colors.white
+                                  : const Color(0xFFEDEDED),
                             ),
                           ),
                           Text(
@@ -235,7 +253,9 @@ class _BookingScreenState extends State<BookingScreen> {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: isSelected ? Colors.white : Colors.black87,
+                              color: isSelected
+                                  ? Colors.white
+                                  : const Color(0xFFEDEDED),
                             ),
                           ),
                         ],
@@ -250,7 +270,11 @@ class _BookingScreenState extends State<BookingScreen> {
             // Chọn rạp
             const Text(
               'Chọn rạp',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFFEDEDED),
+              ),
             ),
             const SizedBox(height: 12),
             ListView.builder(
@@ -271,13 +295,19 @@ class _BookingScreenState extends State<BookingScreen> {
                     decoration: BoxDecoration(
                       color: isSelected
                           ? const Color(0xFF8B1E9B)
-                          : Colors.white,
+                          : const Color(0xFF151521),
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected
+                            ? const Color(0xFF8B1E9B)
+                            : const Color(0xFF222230),
+                        width: 1,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
+                          color: Colors.black.withOpacity(0.35),
+                          blurRadius: 12,
+                          offset: const Offset(0, 8),
                         ),
                       ],
                     ),
@@ -293,10 +323,22 @@ class _BookingScreenState extends State<BookingScreen> {
                             placeholder: (_, __) => Container(
                               width: 60,
                               height: 60,
-                              color: Colors.grey[300],
+                              color: const Color(0xFF222230),
+                              child: const Center(
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFF8B1E9B),
+                                  ),
+                                ),
+                              ),
                             ),
-                            errorWidget: (_, __, ___) =>
-                                const Icon(Icons.location_city),
+                            errorWidget: (_, __, ___) => const Icon(
+                              Icons.location_city,
+                              color: Color(0xFFB9B9C3),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -313,7 +355,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                       : FontWeight.w500,
                                   color: isSelected
                                       ? Colors.white
-                                      : Colors.black87,
+                                      : const Color(0xFFEDEDED),
                                 ),
                               ),
                               Text(
@@ -322,7 +364,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                   fontSize: 14,
                                   color: isSelected
                                       ? Colors.white70
-                                      : Colors.grey[600],
+                                      : const Color(0xFFB9B9C3),
                                 ),
                               ),
                             ],
@@ -336,10 +378,14 @@ class _BookingScreenState extends State<BookingScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Chọn giờ — dùng TimeOfDay từ _momoSlots (đồng bộ MovieSelectionScreen)
+            // Chọn giờ
             const Text(
               'Chọn giờ',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFFEDEDED),
+              ),
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -361,25 +407,33 @@ class _BookingScreenState extends State<BookingScreen> {
                       decoration: BoxDecoration(
                         color: isSelected
                             ? const Color(0xFF8B1E9B)
-                            : Colors.white,
+                            : const Color(0xFF151521),
                         borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected
+                              ? const Color(0xFF8B1E9B)
+                              : const Color(0xFF222230),
+                          width: 1,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
+                            color: Colors.black.withOpacity(0.35),
+                            blurRadius: 10,
+                            offset: const Offset(0, 6),
                           ),
                         ],
                       ),
                       child: Center(
                         child: Text(
-                          _fmt(t), // ✅ hiển thị y hệt MovieSelectionScreen
+                          _fmt(t),
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: isSelected
                                 ? FontWeight.bold
                                 : FontWeight.w500,
-                            color: isSelected ? Colors.white : Colors.black87,
+                            color: isSelected
+                                ? Colors.white
+                                : const Color(0xFFEDEDED),
                           ),
                         ),
                       ),

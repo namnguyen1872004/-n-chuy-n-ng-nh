@@ -223,16 +223,16 @@ class _CinemaScreenState extends State<CinemaScreen> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFF0B0B0F),
       body: Column(
         children: [
-          // Header gradient
+          // Header gradient (tối)
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xFFFAD0E9), Color(0xFFFDE2F3)],
+                colors: [Color(0xFF11111A), Color(0xFF151521)],
               ),
             ),
             child: SafeArea(
@@ -252,7 +252,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
                         IconButton(
                           icon: const Icon(
                             Icons.arrow_back_ios,
-                            color: Colors.black,
+                            color: Color(0xFFEDEDED),
                           ),
                           onPressed: () => Navigator.pop(context),
                           padding: EdgeInsets.zero,
@@ -270,7 +270,8 @@ class _CinemaScreenState extends State<CinemaScreen> {
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
-                        color: Colors.black87,
+                        color: Color(0xFFEDEDED),
+                        letterSpacing: 0.2,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -293,7 +294,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
-                    color: Colors.black87,
+                    color: Color(0xFFEDEDED),
                   ),
                 ),
                 const Spacer(),
@@ -305,7 +306,9 @@ class _CinemaScreenState extends State<CinemaScreen> {
           // List cinemas
           Expanded(
             child: isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
+                  )
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     itemBuilder: (_, i) => _cinemaCard(
@@ -336,37 +339,42 @@ class _CinemaScreenState extends State<CinemaScreen> {
     width: 36,
     height: 36,
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: const Color(0xFF1E1E2A),
       shape: BoxShape.circle,
+      border: Border.all(color: const Color(0xFF2A2A3A)),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.06),
-          blurRadius: 6,
-          offset: const Offset(0, 2),
+          color: Colors.black.withOpacity(0.35),
+          blurRadius: 10,
+          offset: const Offset(0, 6),
         ),
       ],
     ),
-    child: Icon(icon, size: 18, color: Colors.black87),
+    child: Icon(icon, size: 18, color: const Color(0xFFEDEDED)),
   );
 
   Widget _searchField() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF151521),
         borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: const Color(0xFF222230)),
         boxShadow: [
           BoxShadow(
-            blurRadius: 10,
-            color: Colors.black.withOpacity(0.05),
-            offset: const Offset(0, 3),
+            blurRadius: 12,
+            color: Colors.black.withOpacity(0.35),
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: TextField(
         onChanged: (v) => setState(() => searchQuery = v),
+        style: const TextStyle(color: Color(0xFFEDEDED)),
+        cursorColor: const Color(0xFF8B1E9B),
         decoration: const InputDecoration(
           hintText: 'Tìm rạp phim...',
-          prefixIcon: Icon(Icons.search, color: Colors.grey),
+          hintStyle: TextStyle(color: Color(0xFFB9B9C3)),
+          prefixIcon: Icon(Icons.search, color: Color(0xFFB9B9C3)),
           border: InputBorder.none,
           contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
@@ -398,19 +406,19 @@ class _CinemaScreenState extends State<CinemaScreen> {
                   width: 64,
                   height: 64,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: const Color(0xFF151521),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: isSelected
-                          ? const Color(0xFFFF4AA6)
-                          : Colors.black12,
+                          ? const Color(0xFF8B1E9B)
+                          : const Color(0xFF222230),
                       width: isSelected ? 2 : 1,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
+                        color: Colors.black.withOpacity(0.35),
+                        blurRadius: 10,
+                        offset: const Offset(0, 6),
                       ),
                     ],
                   ),
@@ -419,8 +427,20 @@ class _CinemaScreenState extends State<CinemaScreen> {
                     child: CachedNetworkImage(
                       imageUrl: item['icon']!,
                       fit: BoxFit.contain,
-                      errorWidget: (_, __, ___) =>
-                          const Icon(Icons.local_activity),
+                      placeholder: (_, __) => const Center(
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFF8B1E9B),
+                          ),
+                        ),
+                      ),
+                      errorWidget: (_, __, ___) => const Icon(
+                        Icons.local_activity,
+                        color: Color(0xFFB9B9C3),
+                      ),
                     ),
                   ),
                 ),
@@ -437,8 +457,8 @@ class _CinemaScreenState extends State<CinemaScreen> {
                       fontWeight: FontWeight.w700,
                       height: 1.1,
                       color: isSelected
-                          ? const Color(0xFFFF4AA6)
-                          : Colors.black87,
+                          ? const Color(0xFF8B1E9B)
+                          : const Color(0xFFEDEDED),
                     ),
                   ),
                 ),
@@ -457,18 +477,18 @@ class _CinemaScreenState extends State<CinemaScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.pink.shade50,
-          border: Border.all(color: const Color(0xFFFF85C1)),
+          color: const Color(0xFF151521),
+          border: Border.all(color: const Color(0xFF8B1E9B)),
           borderRadius: BorderRadius.circular(24),
         ),
         child: Row(
           children: [
-            const Icon(Icons.location_on, size: 16, color: Color(0xFFFF4AA6)),
+            const Icon(Icons.location_on, size: 16, color: Color(0xFF8B1E9B)),
             const SizedBox(width: 6),
             Text(
               city,
               style: const TextStyle(
-                color: Color(0xFFFF4AA6),
+                color: Color(0xFFEDEDED),
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -490,14 +510,14 @@ class _CinemaScreenState extends State<CinemaScreen> {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: const Color(0xFF151521),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.black12),
+          border: Border.all(color: const Color(0xFF222230)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              color: Colors.black.withOpacity(0.35),
+              blurRadius: 14,
+              offset: const Offset(0, 8),
             ),
           ],
         ),
@@ -512,8 +532,26 @@ class _CinemaScreenState extends State<CinemaScreen> {
                     width: 44,
                     height: 44,
                     fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) =>
-                        const Icon(Icons.local_movies, size: 36),
+                    placeholder: (_, __) => Container(
+                      width: 44,
+                      height: 44,
+                      color: const Color(0xFF222230),
+                      child: const Center(
+                        child: SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFF8B1E9B),
+                          ),
+                        ),
+                      ),
+                    ),
+                    errorWidget: (_, __, ___) => const Icon(
+                      Icons.local_movies,
+                      size: 36,
+                      color: Color(0xFFB9B9C3),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -526,7 +564,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
-                          color: Colors.black87,
+                          color: Color(0xFFEDEDED),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -534,9 +572,9 @@ class _CinemaScreenState extends State<CinemaScreen> {
                         cinema.distance > 0
                             ? 'Khoảng cách: ${cinema.distance.toStringAsFixed(1)} km'
                             : 'Bạn vừa chọn rạp này',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 13,
-                          color: Colors.grey.shade600,
+                          color: Color(0xFFB9B9C3),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -557,20 +595,21 @@ class _CinemaScreenState extends State<CinemaScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.black12),
+                          border: Border.all(color: const Color(0xFF222230)),
                           borderRadius: BorderRadius.circular(10),
+                          color: const Color(0xFF1C1C28),
                         ),
                         child: Icon(
                           isFav ? Icons.favorite : Icons.favorite_border,
                           size: 18,
                           color: isFav
-                              ? const Color(0xFFFF4AA6)
-                              : Colors.black54,
+                              ? const Color(0xFF8B1E9B)
+                              : const Color(0xFFEDEDED),
                         ),
                       ),
                     ),
                     const SizedBox(width: 10),
-                    const Icon(Icons.chevron_right, color: Colors.black38),
+                    const Icon(Icons.chevron_right, color: Color(0xFFB9B9C3)),
                   ],
                 ),
               ],
@@ -583,9 +622,9 @@ class _CinemaScreenState extends State<CinemaScreen> {
                 Expanded(
                   child: RichText(
                     text: TextSpan(
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 14,
-                        color: Colors.grey.shade800,
+                        color: Color(0xFFEDEDED),
                         height: 1.35,
                       ),
                       children: [
@@ -598,7 +637,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
                             child: const Text(
                               'Tìm đường',
                               style: TextStyle(
-                                color: Color(0xFFFF4AA6),
+                                color: Color(0xFF8B1E9B),
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
