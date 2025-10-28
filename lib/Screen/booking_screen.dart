@@ -24,28 +24,21 @@ class _BookingScreenState extends State<BookingScreen> {
   // ======= DỮ LIỆU CHUNG =======
 
   // Các mốc giờ chuẩn — giống MovieSelectionScreen (demo)
-  static const List<String> _momoSlots = [
-    '08:40',
-    '09:40',
-    '10:10',
-    '11:00',
-    '11:30',
-    '12:00',
-    '12:30',
-    '13:20',
-    '14:20',
-    '14:50',
-    '15:40',
-    '16:40',
+  // Mỗi phần tử: [startHour, startMinute, endHour, endMinute]
+  static const List<List<int>> _momoSlots = [
+    [8, 40, 10, 57],
+    [9, 40, 11, 57],
+    [10, 10, 12, 27],
+    [11, 0, 13, 17],
+    [11, 30, 13, 44],
+    [12, 0, 14, 17],
+    [12, 30, 14, 47],
+    [13, 20, 15, 37],
+    [14, 20, 16, 37],
+    [14, 50, 17, 7],
+    [15, 40, 17, 57],
+    [16, 40, 18, 57],
   ];
-
-  // parse 'HH:mm' -> TimeOfDay
-  TimeOfDay _parseTimeOfDay(String s) {
-    final p = s.split(':');
-    final h = int.tryParse(p[0]) ?? 0;
-    final m = int.tryParse(p[1]) ?? 0;
-    return TimeOfDay(hour: h.clamp(0, 23), minute: m.clamp(0, 59));
-  }
 
   // format TimeOfDay -> 'HH:mm'
   String _fmt(TimeOfDay t) =>
@@ -64,6 +57,12 @@ class _BookingScreenState extends State<BookingScreen> {
       'address': 'Vincom Mega Mall Royal City, Thanh Xuân, Hà Nội',
       'distance': 2.5,
       'imageUrl': 'https://cdn.xanhsm.com/2025/02/bf178809-royal-city-5.jpg',
+      // Custom slots for this cinema (startHour,startMin,endHour,endMin)
+      'slots': [
+        [8, 50, 11, 7],
+        [11, 30, 13, 44],
+        [14, 0, 16, 17],
+      ],
     },
     {
       'name': 'Lotte Cinema Times City',
@@ -71,6 +70,7 @@ class _BookingScreenState extends State<BookingScreen> {
       'distance': 1.8,
       'imageUrl':
           'https://img.tripi.vn/cdn-cgi/image/width=700,height=700/https://gcs.tripi.vn/public-tripi/tripi-feed/img/486420RoV/anh-mo-ta.png',
+      // No custom slots -> will use global demo slots
     },
     {
       'name': 'BHD Star Cineplex Aeon Mall Hà Đông',
@@ -78,6 +78,12 @@ class _BookingScreenState extends State<BookingScreen> {
       'distance': 3.2,
       'imageUrl':
           'https://www.bhdstar.vn/wp-content/uploads/2023/12/0000000009.png',
+      'slots': [
+        [9, 0, 11, 17],
+        [12, 0, 14, 17],
+        [15, 0, 17, 7],
+        [18, 30, 20, 47],
+      ],
     },
   ];
 
@@ -105,8 +111,21 @@ class _BookingScreenState extends State<BookingScreen> {
     final selectedDate = availableDates[selectedDayIndex];
     final selectedCinema = availableCinemas[selectedCinemaIndex];
 
-    // ✅ DÙNG SLOT CHUẨN GIỐNG MovieSelectionScreen
-    final List<TimeOfDay> times = _momoSlots.map(_parseTimeOfDay).toList();
+    // ✅ Lấy slot từ rạp đang chọn (nếu rạp có 'slots' riêng) hoặc fallback sang global _momoSlots
+    final rawSlots = (selectedCinema['slots'] is List)
+        ? List<List<int>>.from(
+            (selectedCinema['slots'] as List).map((e) => List<int>.from(e)),
+          )
+        : _momoSlots;
+
+    final times = rawSlots
+        .map(
+          (t) => {
+            'start': TimeOfDay(hour: t[0], minute: t[1]),
+            'end': TimeOfDay(hour: t[2], minute: t[3]),
+          },
+        )
+        .toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B0B0F),
@@ -395,6 +414,8 @@ class _BookingScreenState extends State<BookingScreen> {
                 itemCount: times.length,
                 itemBuilder: (context, index) {
                   final t = times[index];
+                  final start = t['start'] as TimeOfDay;
+                  final end = t['end'] as TimeOfDay;
                   final isSelected = index == selectedTimeIndex;
                   return GestureDetector(
                     onTap: () => setState(() => selectedTimeIndex = index),
@@ -425,7 +446,7 @@ class _BookingScreenState extends State<BookingScreen> {
                       ),
                       child: Center(
                         child: Text(
-                          _fmt(t),
+                          '${_fmt(start)} ~ ${_fmt(end)}',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: isSelected
@@ -449,8 +470,8 @@ class _BookingScreenState extends State<BookingScreen> {
               onPressed:
                   (selectedTimeIndex >= 0 && selectedTimeIndex < times.length)
                   ? () {
-                      final timeOfDay =
-                          times[selectedTimeIndex]; // TimeOfDay chuẩn
+                      final start =
+                          times[selectedTimeIndex]['start'] as TimeOfDay;
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -458,7 +479,7 @@ class _BookingScreenState extends State<BookingScreen> {
                             movie: widget.movie,
                             selectedDate: selectedDate,
                             selectedCinema: selectedCinema['name'] as String,
-                            selectedTime: timeOfDay,
+                            selectedTime: start,
                           ),
                         ),
                       );

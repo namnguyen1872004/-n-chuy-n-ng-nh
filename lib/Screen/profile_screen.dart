@@ -30,43 +30,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await Firebase.initializeApp();
   }
 
-  // Lưu dữ liệu mẫu lên Firebase (chạy một lần) - Comment nếu đã có dữ liệu
-  /*
-  Future<void> _uploadSampleData() async {
-    try {
-      await _database.child('users/user1/profile').set({
-        'name': 'Nguyễn Hoài Nam',
-        'phone': '0941969269',
-        'points': '1500',
-      });
-
-      await _database.child('users/user1/transactions').set({
-        'transaction1': {
-          'title': 'Vé CGV - Mưa đỏ',
-          'date': '07/10/2025',
-          'amount': '150.000 VNĐ',
-          'status': 'Đã thanh toán',
-        },
-        'transaction2': {
-          'title': 'Combo bắp nước Lotte',
-          'date': '05/10/2025',
-          'amount': '80.000 VNĐ',
-          'status': 'Hoàn thành',
-        },
-        'transaction3': {
-          'title': 'Vé BHD - F1',
-          'date': '03/10/2025',
-          'amount': '120.000 VNĐ',
-          'status': 'Đã hủy',
-        },
-      });
-      print('Sample data uploaded successfully!');
-    } catch (e) {
-      print('Error uploading sample data: $e');
-    }
-  }
-  */
-
   // Lấy dữ liệu profile từ Firebase
   Future<void> _fetchProfileData() async {
     try {

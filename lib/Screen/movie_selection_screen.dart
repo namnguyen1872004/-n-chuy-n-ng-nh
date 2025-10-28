@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../models/cinema_model.dart';
 import '../models/movie.dart';
+import '../models/showtime.dart';
 import 'seat_selection_screen.dart';
 
 class MovieSelectionScreen extends StatefulWidget {
@@ -25,7 +26,7 @@ class _CinemaShowtimesScreenState extends State<MovieSelectionScreen> {
   // dữ liệu
   bool loading = true;
   List<Movie> movies = [];
-  final Map<String, List<_UiShowtime>> showtimesByMovie = {};
+  final Map<String, List<Showtime>> showtimesByMovie = {};
 
   @override
   void initState() {
@@ -142,16 +143,16 @@ class _CinemaShowtimesScreenState extends State<MovieSelectionScreen> {
       for (final entry in data.entries) {
         final movieId = entry.key.toString();
         final value = entry.value;
-        final list = <_UiShowtime>[];
+        final list = <Showtime>[];
 
         if (value is List) {
           for (final v in value) {
-            final t = _UiShowtime.fromAny(v);
+            final t = Showtime.fromAny(v);
             if (t != null) list.add(t);
           }
         } else if (value is Map) {
           for (final v in Map<String, dynamic>.from(value).values) {
-            final t = _UiShowtime.fromAny(v);
+            final t = Showtime.fromAny(v);
             if (t != null) list.add(t);
           }
         }
@@ -180,7 +181,7 @@ class _CinemaShowtimesScreenState extends State<MovieSelectionScreen> {
       showtimesByMovie[m.id] = demo.map((t) {
         final options = [146, 162, 183]..shuffle();
         final total = options.first;
-        return _UiShowtime(
+        return Showtime(
           start: TimeOfDay(hour: t[0], minute: t[1]),
           end: TimeOfDay(hour: t[2], minute: t[3]),
           available: (total * 0.85).floor(),
@@ -219,8 +220,6 @@ class _CinemaShowtimesScreenState extends State<MovieSelectionScreen> {
     }
   }
 
-  String _fmt(TimeOfDay t) =>
-      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
   String _weekday(DateTime d) =>
       ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d.weekday % 7];
 
@@ -444,71 +443,11 @@ class _CinemaShowtimesScreenState extends State<MovieSelectionScreen> {
   }
 }
 
-// ==== UI helper ====
-class _UiShowtime {
-  final TimeOfDay start;
-  final TimeOfDay end;
-  final int available;
-  final int total;
-  final String format;
-  final String subtitle;
-  const _UiShowtime({
-    required this.start,
-    required this.end,
-    required this.available,
-    required this.total,
-    required this.format,
-    required this.subtitle,
-  });
-
-  static _UiShowtime? fromAny(dynamic v) {
-    if (v is Map) {
-      TimeOfDay? toTOD(dynamic x) {
-        if (x is String && x.contains(':')) {
-          final p = x.split(':');
-          final h = int.tryParse(p[0]) ?? 0;
-          final m = int.tryParse(p[1]) ?? 0;
-          return TimeOfDay(hour: h, minute: m);
-        }
-        if (x is int) {
-          final h = (x ~/ 60).clamp(0, 23);
-          final m = (x % 60).clamp(0, 59);
-          return TimeOfDay(hour: h, minute: m);
-        }
-        return null;
-      }
-
-      final st = toTOD(v['start']) ?? const TimeOfDay(hour: 0, minute: 0);
-      final en = toTOD(v['end']) ?? const TimeOfDay(hour: 0, minute: 0);
-      final avail = (v['available'] is num)
-          ? (v['available'] as num).toInt()
-          : int.tryParse('${v['available'] ?? 0}') ?? 0;
-      final tot = (v['total'] is num)
-          ? (v['total'] as num).toInt()
-          : int.tryParse('${v['total'] ?? 0}') ?? 0;
-      final fmt = (v['format'] ?? '2D').toString();
-      final sub = (v['subtitle'] ?? '').toString().isEmpty
-          ? 'Phụ đề'
-          : v['subtitle'].toString();
-
-      return _UiShowtime(
-        start: st,
-        end: en,
-        available: avail,
-        total: tot,
-        format: fmt,
-        subtitle: sub,
-      );
-    }
-    return null;
-  }
-}
-
 // ==== Card giống MoMo ====
 class _MovieMoMoCard extends StatelessWidget {
   final Movie movie;
-  final List<_UiShowtime> showtimes;
-  final ValueChanged<_UiShowtime> onTapShowtime;
+  final List<Showtime> showtimes;
+  final ValueChanged<Showtime> onTapShowtime;
 
   const _MovieMoMoCard({
     required this.movie,
@@ -550,9 +489,7 @@ class _MovieMoMoCard extends StatelessWidget {
                 ),
               ),
               TextButton(
-                onPressed: () {
-                  /* TODO: chi tiết */
-                },
+                onPressed: () {},
                 child: const Text(
                   'Chi tiết',
                   style: TextStyle(color: Color(0xFF8B1E9B)),
