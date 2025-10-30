@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart' as fb;
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/profile_model.dart';
+import '../services/auth_service.dart';
+import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -13,16 +16,32 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final fb.DatabaseReference _database = fb.FirebaseDatabase.instance.ref();
+  final AuthService _authService = AuthService();
   UserProfile? userProfile;
   List<Transaction> recentTransactions = [];
   bool isLoading = true;
+  User? _currentUser;
 
   @override
   void initState() {
     super.initState();
     _initializeFirebase();
-    _fetchProfileData();
-    _fetchTransactions();
+    // listen to auth changes and load profile when signed in
+    _authService.authStateChanges().listen((u) {
+      setState(() {
+        _currentUser = u;
+        isLoading = false;
+      });
+      if (u != null) {
+        _fetchProfileData();
+        _fetchTransactions();
+      } else {
+        setState(() {
+          userProfile = null;
+          recentTransactions = [];
+        });
+      }
+    });
   }
 
   // Khởi tạo Firebase
@@ -32,19 +51,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // Lấy dữ liệu profile từ Firebase
   Future<void> _fetchProfileData() async {
+    if (_currentUser == null) return;
     try {
-      final snapshot = await _database.child('users/user1/profile').get();
-      print("Profile snapshot exists: ${snapshot.exists}");
-      print("Profile snapshot value: ${snapshot.value}");
+      final snapshot = await _database
+          .child('users')
+          .child(_currentUser!.uid)
+          .get();
       if (snapshot.exists) {
         final data = snapshot.value as Map<dynamic, dynamic>;
         setState(() {
           userProfile = UserProfile(
             name: data['name'] as String? ?? 'Unknown',
             phone: data['phone'] as String? ?? 'Unknown',
-            points: data['points'] as String? ?? '0',
+            points: (data['points'] ?? 0).toString(),
           );
-          isLoading = false;
         });
       } else {
         setState(() {
@@ -53,16 +73,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             phone: 'Unknown',
             points: '0',
           );
-          isLoading = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Không tìm thấy dữ liệu profile, tạo mặc định'),
-          ),
-        );
       }
     } catch (e) {
-      setState(() => isLoading = false);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Lỗi tải profile: $e')));
@@ -71,10 +84,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // Lấy danh sách giao dịch từ Firebase
   Future<void> _fetchTransactions() async {
+    if (_currentUser == null) return;
     try {
-      final snapshot = await _database.child('users/user1/transactions').get();
-      print("Transactions snapshot exists: ${snapshot.exists}");
-      print("Transactions snapshot value: ${snapshot.value}");
+      final snapshot = await _database
+          .child('users')
+          .child(_currentUser!.uid)
+          .child('transactions')
+          .get();
       if (snapshot.exists) {
         final data = snapshot.value as Map<dynamic, dynamic>?;
         if (data != null) {
@@ -89,22 +105,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
           }).toList();
           setState(() {
             recentTransactions = transactions;
-            isLoading = false;
           });
         }
-      } else {
-        setState(() => isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Không tìm thấy giao dịch')),
-        );
       }
     } catch (e) {
-      setState(() => isLoading = false);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Lỗi tải giao dịch: $e')));
     }
   }
+
+  // Hiển thị bottom sheet cho Đăng nhập / Đăng ký
+  // (Moved to dedicated screens) Previously we showed a bottom sheet here; we now navigate to Login/Register screens.
 
   @override
   Widget build(BuildContext context) {
@@ -287,21 +299,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildMenuItem(
                     icon: Icons.settings,
                     title: 'Cài đặt',
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Mở cài đặt')),
+                    onTap: () async {
+                      // Navigate to Edit Profile screen; refresh profile on successful save
+                      final res = await Navigator.pushNamed(
+                        context,
+                        '/edit-profile',
                       );
+                      if (res == true) {
+                        await _fetchProfileData();
+                      }
                     },
                   ),
-                  _buildMenuItem(
-                    icon: Icons.logout,
-                    title: 'Đăng xuất',
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Đăng xuất')),
-                      );
-                    },
-                  ),
+                  // If user is signed in show logout, otherwise show login/register entry
+                  _currentUser != null
+                      ? _buildMenuItem(
+                          icon: Icons.logout,
+                          title: 'Đăng xuất',
+                          onTap: () async {
+                            await _authService.signOut();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Đã đăng xuất')),
+                            );
+                            // After sign out navigate to Login and clear history
+                            Navigator.pushNamedAndRemoveUntil(
+                              context,
+                              '/login',
+                              (route) => false,
+                            );
+                          },
+                        )
+                      : _buildMenuItem(
+                          icon: Icons.login,
+                          title: 'Đăng nhập / Đăng ký',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    LoginScreen(authService: _authService),
+                              ),
+                            );
+                          },
+                        ),
                 ],
               ),
             ),
@@ -475,6 +513,173 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// Small widget that contains Login / Register forms used in the bottom sheet
+class _AuthForms extends StatefulWidget {
+  final VoidCallback onCompleted;
+  final AuthService authService;
+
+  const _AuthForms({
+    required this.onCompleted,
+    required this.authService,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  State<_AuthForms> createState() => _AuthFormsState();
+}
+
+class _AuthFormsState extends State<_AuthForms> {
+  bool _isRegister = false;
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    try {
+      if (_isRegister) {
+        await widget.authService.register(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+          name: _nameController.text.trim(),
+          phone: _phoneController.text.trim(),
+        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đăng ký thành công')));
+      } else {
+        await widget.authService.login(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đăng nhập thành công')));
+      }
+      widget.onCompleted();
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              _isRegister ? 'Đăng ký' : 'Đăng nhập',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _isRegister = !_isRegister),
+              child: Text(
+                _isRegister
+                    ? 'Đã có tài khoản? Đăng nhập'
+                    : 'Chưa có tài khoản? Đăng ký',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              if (_isRegister)
+                TextFormField(
+                  controller: _nameController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Họ và tên',
+                    labelStyle: TextStyle(color: Colors.white60),
+                  ),
+                  validator: (v) =>
+                      (v == null || v.isEmpty) ? 'Vui lòng nhập tên' : null,
+                ),
+              if (_isRegister) const SizedBox(height: 8),
+              TextFormField(
+                controller: _emailController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  labelStyle: TextStyle(color: Colors.white60),
+                ),
+                validator: (v) => (v == null || !v.contains('@'))
+                    ? 'Email không hợp lệ'
+                    : null,
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _passwordController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Mật khẩu',
+                  labelStyle: TextStyle(color: Colors.white60),
+                ),
+                obscureText: true,
+                validator: (v) => (v == null || v.length < 6)
+                    ? 'Mật khẩu ít nhất 6 ký tự'
+                    : null,
+              ),
+              if (_isRegister) const SizedBox(height: 8),
+              if (_isRegister)
+                TextFormField(
+                  controller: _phoneController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Số điện thoại',
+                    labelStyle: TextStyle(color: Colors.white60),
+                  ),
+                  validator: (v) => (v == null || v.isEmpty)
+                      ? 'Vui lòng nhập số điện thoại'
+                      : null,
+                ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF8B1E9B),
+                  ),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(_isRegister ? 'Đăng ký' : 'Đăng nhập'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

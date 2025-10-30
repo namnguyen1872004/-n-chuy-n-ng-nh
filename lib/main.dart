@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+// import 'package:firebase_auth/firebase_auth.dart';
 import 'package:dat_ve_xem_phim/firebase_options.dart';
 
 // Screens
 import 'Screen/home_screen.dart';
+import 'Screen/login_screen.dart';
+import 'services/auth_service.dart';
 import 'Screen/profile_screen.dart';
+import 'Screen/edit_profile_screen.dart';
 import 'Screen/cinema_screen.dart';
 import 'Screen/snack_screen.dart';
 import 'Screen/movie_detail_screen.dart';
@@ -36,14 +40,18 @@ class MyApp extends StatelessWidget {
         colorSchemeSeed: const Color(0xFF3B82F6),
         fontFamily: 'Roboto',
       ),
-      initialRoute: '/home',
+      initialRoute: '/login',
       onGenerateRoute: (RouteSettings settings) {
         switch (settings.name) {
           // ===== Static =====
+          case '/login':
+            return _mat(LoginScreen(authService: AuthService()));
           case '/home':
             return _mat(const HomeScreen());
           case '/profile':
             return _mat(const ProfileScreen());
+          case '/edit-profile':
+            return _mat(const EditProfileScreen());
           case '/cinema':
             return _mat(const CinemaScreen());
           case '/snack':
@@ -67,7 +75,7 @@ class MyApp extends StatelessWidget {
                 cinema = args['cinema'] as Cinema;
               }
               if (cinema != null) {
-                return _mat(MovieSelectionScreen(cinema: cinema!));
+                return _mat(MovieSelectionScreen(cinema: cinema));
               }
               return _err('Lỗi: /movie-selection cần Cinema.');
             }
@@ -102,7 +110,7 @@ class MyApp extends StatelessWidget {
                 movie = args['movie'] as Movie;
               }
               if (movie != null) {
-                return _mat(BookingScreen(movie: movie!));
+                return _mat(BookingScreen(movie: movie));
               }
               return _err('Lỗi: /booking cần Movie.');
             }
