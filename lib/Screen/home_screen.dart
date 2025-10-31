@@ -18,8 +18,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final DatabaseReference _database = FirebaseDatabase.instance.ref();
   int _selectedIndex = 0;
   final TextEditingController _searchController = TextEditingController();
-  String? _selectedGenre; // for "Phim sắp chiếu"
-  String? _selectedGenreNow; // for "Phim đang chiếu"
+  String? _selectedGenre;
+  String? _selectedGenreNow;
 
   @override
   void initState() {
@@ -36,17 +36,13 @@ class _HomeScreenState extends State<HomeScreen> {
         if (data is Map<dynamic, dynamic>) {
           data.forEach((_, v) {
             if (v is Map<dynamic, dynamic>) {
-              try {
-                fetched.add(Movie.fromMap(Map<String, dynamic>.from(v)));
-              } catch (_) {}
+              fetched.add(Movie.fromMap(Map<String, dynamic>.from(v)));
             }
           });
         } else if (data is List<dynamic>) {
           for (final v in data) {
             if (v is Map<dynamic, dynamic>) {
-              try {
-                fetched.add(Movie.fromMap(Map<String, dynamic>.from(v)));
-              } catch (_) {}
+              fetched.add(Movie.fromMap(Map<String, dynamic>.from(v)));
             }
           }
         }
@@ -71,9 +67,6 @@ class _HomeScreenState extends State<HomeScreen> {
         Navigator.pushNamed(context, '/snack');
         break;
       case 3:
-        Navigator.pushNamed(context, '/genres');
-        break;
-      case 4:
         Navigator.pushNamed(context, '/profile');
         break;
     }
@@ -93,113 +86,93 @@ class _HomeScreenState extends State<HomeScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF0B0B0F),
+      backgroundColor: Colors.transparent,
       builder: (context) {
-        final maxHeight = MediaQuery.of(context).size.height * 0.75;
-        return SafeArea(
-          child: Container(
-            constraints: BoxConstraints(maxHeight: maxHeight),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 8.0,
-                    horizontal: 16.0,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Chọn thể loại',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Color(0xFFEDEDED)),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(color: Colors.white12, height: 1),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
+        return DraggableScrollableSheet(
+          expand: false,
+          maxChildSize: 0.9,
+          minChildSize: 0.5,
+          initialChildSize: 0.7,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFF0B0B0F),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 16,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        ListTile(
-                          title: const Text(
-                            'Tất cả',
-                            style: TextStyle(color: Color(0xFFEDEDED)),
+                        const Text(
+                          'Chọn thể loại',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
                           ),
-                          leading: Radio<String?>(
-                            value: null,
-                            groupValue: forNowShowing
-                                ? _selectedGenreNow
-                                : _selectedGenre,
-                            onChanged: (v) {
-                              setState(() {
-                                if (forNowShowing) {
-                                  _selectedGenreNow = v;
-                                } else {
-                                  _selectedGenre = v;
-                                }
-                              });
-                              Navigator.pop(context);
-                            },
-                          ),
-                          onTap: () {
-                            setState(() {
-                              if (forNowShowing)
-                                _selectedGenreNow = null;
-                              else
-                                _selectedGenre = null;
-                            });
-                            Navigator.pop(context);
-                          },
                         ),
-                        ...genreList.map(
-                          (g) => ListTile(
-                            title: Text(
-                              g,
-                              style: const TextStyle(color: Color(0xFFEDEDED)),
-                            ),
-                            leading: Radio<String?>(
-                              value: g,
-                              groupValue: forNowShowing
-                                  ? _selectedGenreNow
-                                  : _selectedGenre,
-                              onChanged: (v) {
-                                setState(() {
-                                  if (forNowShowing)
-                                    _selectedGenreNow = v;
-                                  else
-                                    _selectedGenre = v;
-                                });
-                                Navigator.pop(context);
-                              },
-                            ),
-                            onTap: () {
-                              setState(() {
-                                if (forNowShowing)
-                                  _selectedGenreNow = g;
-                                else
-                                  _selectedGenre = g;
-                              });
-                              Navigator.pop(context);
-                            },
+                        IconButton(
+                          icon: const Icon(
+                            Icons.close,
+                            color: Color(0xFFEDEDED),
                           ),
+                          onPressed: () => Navigator.pop(context),
                         ),
                       ],
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
+                  const Divider(color: Colors.white24, height: 1),
+                  Expanded(
+                    child: ListView.builder(
+                      controller: scrollController,
+                      itemCount: genreList.length + 1,
+                      itemBuilder: (context, index) {
+                        if (index == 0) {
+                          return ListTile(
+                            title: const Text(
+                              'Tất cả',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            onTap: () {
+                              setState(() {
+                                if (forNowShowing)
+                                  _selectedGenreNow = null;
+                                else
+                                  _selectedGenre = null;
+                              });
+                              Navigator.pop(context);
+                            },
+                          );
+                        }
+                        final g = genreList[index - 1];
+                        return ListTile(
+                          title: Text(
+                            g,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          onTap: () {
+                            setState(() {
+                              if (forNowShowing)
+                                _selectedGenreNow = g;
+                              else
+                                _selectedGenre = g;
+                            });
+                            Navigator.pop(context);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
@@ -249,18 +222,17 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: const Color(0xFF0B0B0F),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0B0B0F),
-        elevation: 0,
         title: const Text(
           'PhimHay.net',
           style: TextStyle(
-            color: Color(0xFFEDEDED),
+            color: Colors.white,
             fontWeight: FontWeight.bold,
             fontSize: 24,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search, color: Color(0xFFEDEDED)),
+            icon: const Icon(Icons.search, color: Colors.white),
             onPressed: () => showSearch(
               context: context,
               delegate: MovieSearchDelegate(movies),
@@ -270,456 +242,247 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: SingleChildScrollView(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16.0,
-                vertical: 8.0,
-              ),
-              child: TextField(
-                controller: _searchController,
-                style: const TextStyle(color: Color(0xFFEDEDED)),
-                cursorColor: const Color(0xFF8B1E9B),
-                decoration: InputDecoration(
-                  hintText: 'Tìm phim, rạp chiếu...',
-                  hintStyle: const TextStyle(color: Color(0xFFB9B9C3)),
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    color: Color(0xFFB9B9C3),
-                  ),
-                  filled: true,
-                  fillColor: const Color(0xFF151521),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF8B1E9B),
-                      width: 1,
-                    ),
-                  ),
-                ),
-                onSubmitted: (v) {
-                  if (v.isNotEmpty)
-                    showSearch(
-                      context: context,
-                      delegate: MovieSearchDelegate(movies, initialQuery: v),
-                    );
-                },
-              ),
+            _buildSearchBar(),
+            _buildCarousel(nowShowing),
+            _buildSectionHeader(
+              'Phim đang chiếu',
+              _selectedGenreNow,
+              () => _showGenreFilterSheet(forNowShowing: true),
             ),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0),
-              child: carousel.CarouselSlider(
-                options: carousel.CarouselOptions(
-                  height: 300,
-                  autoPlay: true,
-                  enlargeCenterPage: true,
-                  viewportFraction: 0.8,
-                ),
-                items: nowShowing.take(5).map((movie) {
-                  return GestureDetector(
-                    onTap: () => Navigator.pushNamed(
-                      context,
-                      '/details',
-                      arguments: movie,
-                    ),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 8.0),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.5),
-                            blurRadius: 18,
-                            offset: const Offset(0, 12),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            CachedNetworkImage(
-                              imageUrl: movie.posterUrl,
-                              fit: BoxFit.cover,
-                              placeholder: (c, u) => const Center(
-                                child: CircularProgressIndicator(
-                                  color: Color(0xFF8B1E9B),
-                                ),
-                              ),
-                              errorWidget: (c, u, e) => Container(
-                                color: const Color(0xFF151521),
-                                child: const Icon(
-                                  Icons.broken_image_outlined,
-                                  color: Color(0xFFB9B9C3),
-                                ),
-                              ),
-                            ),
-                            Container(
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.transparent,
-                                    Color(0xAA000000),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              bottom: 10,
-                              left: 10,
-                              right: 10,
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      movie.title,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Color(0xFFEDEDED),
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.55),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: Colors.white12,
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.star_rounded,
-                                          color: Color(0xFFFFC107),
-                                          size: 16,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          movie.rating.toStringAsFixed(1),
-                                          style: const TextStyle(
-                                            color: Color(0xFFEDEDED),
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
+            _buildMovieList(filteredNowShowing),
+            _buildSectionHeader(
+              'Phim sắp chiếu',
+              _selectedGenre,
+              () => _showGenreFilterSheet(forNowShowing: false),
             ),
-
-            // Now showing header + filter
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16.0,
-                vertical: 8.0,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Phim đang chiếu',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFEDEDED),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => _showGenreFilterSheet(forNowShowing: true),
-                    icon: const Icon(
-                      Icons.filter_list,
-                      color: Color(0xFFEDEDED),
-                    ),
-                    label: Text(
-                      _selectedGenreNow == null
-                          ? 'Bộ lọc'
-                          : 'Bộ lọc: $_selectedGenreNow',
-                      style: const TextStyle(color: Color(0xFFEDEDED)),
-                    ),
-                    style: TextButton.styleFrom(
-                      backgroundColor: const Color(0xFF151521),
-                      side: BorderSide(color: Colors.white12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            SizedBox(
-              height: 220,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: filteredNowShowing.length,
-                itemBuilder: (context, index) {
-                  final movie = filteredNowShowing[index];
-                  return _movieCard(movie);
-                },
-              ),
-            ),
-
-            // Coming soon header + filter
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16.0,
-                vertical: 8.0,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Phim sắp chiếu',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFEDEDED),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: () =>
-                        _showGenreFilterSheet(forNowShowing: false),
-                    icon: const Icon(
-                      Icons.filter_list,
-                      color: Color(0xFFEDEDED),
-                    ),
-                    label: Text(
-                      _selectedGenre == null
-                          ? 'Bộ lọc'
-                          : 'Bộ lọc: $_selectedGenre',
-                      style: const TextStyle(color: Color(0xFFEDEDED)),
-                    ),
-                    style: TextButton.styleFrom(
-                      backgroundColor: const Color(0xFF151521),
-                      side: BorderSide(color: Colors.white12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            SizedBox(
-              height: 220,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: filteredComingSoon.length > 6
-                    ? 6
-                    : filteredComingSoon.length,
-                itemBuilder: (context, index) {
-                  final movie = filteredComingSoon[index];
-                  return _movieCard(movie);
-                },
-              ),
-            ),
-
-            const SizedBox(height: 20),
+            _buildMovieList(filteredComingSoon),
           ],
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home, size: 24),
-            activeIcon: Icon(Icons.home, size: 28),
-            label: 'HOME',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.location_on, size: 24),
-            activeIcon: Icon(Icons.location_on, size: 28),
-            label: 'CHỌN RẠP',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.local_drink, size: 24),
-            activeIcon: Icon(Icons.local_drink, size: 28),
-            label: 'BẮP NƯỚC',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.category, size: 24),
-            activeIcon: Icon(Icons.category, size: 28),
-            label: 'NHÓM PHIM',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person, size: 24),
-            activeIcon: Icon(Icons.person, size: 28),
-            label: 'PROFILE',
-          ),
-        ],
-        currentIndex: _selectedIndex,
-        selectedItemColor: const Color(0xFF8B1E9B),
-        unselectedItemColor: const Color(0xFFB9B9C3),
-        backgroundColor: const Color(0xFF151521),
-        type: BottomNavigationBarType.fixed,
-        onTap: _onItemTapped,
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF151521),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.5),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          backgroundColor: const Color(0xFF151521),
+          selectedItemColor: const Color(0xFF8B1E9B),
+          unselectedItemColor: const Color(0xFFB9B9C3),
+          type: BottomNavigationBarType.fixed,
+          currentIndex: _selectedIndex,
+          onTap: _onItemTapped,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'HOME'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.location_on),
+              label: 'CHỌN RẠP',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.local_drink),
+              label: 'BẮP NƯỚC',
+            ),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'PROFILE'),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _movieCard(Movie movie) {
-    return Container(
-      width: 130,
-      margin: const EdgeInsets.only(right: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () =>
-                  Navigator.pushNamed(context, '/details', arguments: movie),
-              child: Container(
-                height: 160,
-                width: 130,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.45),
-                      blurRadius: 12,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: CachedNetworkImage(
-                    imageUrl: movie.posterUrl,
-                    height: 160,
-                    width: 130,
-                    fit: BoxFit.cover,
-                    placeholder: (c, u) => const Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xFF8B1E9B),
-                      ),
-                    ),
-                    errorWidget: (c, u, e) => Container(
-                      color: const Color(0xFF151521),
-                      child: const Icon(
-                        Icons.broken_image_outlined,
-                        color: Color(0xFFB9B9C3),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 50,
-            child: GestureDetector(
-              onTap: () =>
-                  Navigator.pushNamed(context, '/details', arguments: movie),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: Text(
-                  movie.title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFEDEDED),
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          ),
-        ],
+  Widget _buildSearchBar() => Padding(
+    padding: const EdgeInsets.all(16.0),
+    child: TextField(
+      controller: _searchController,
+      style: const TextStyle(color: Colors.white),
+      cursorColor: const Color(0xFF8B1E9B),
+      decoration: InputDecoration(
+        hintText: 'Tìm phim, rạp chiếu...',
+        hintStyle: const TextStyle(color: Color(0xFFB9B9C3)),
+        prefixIcon: const Icon(Icons.search, color: Color(0xFFB9B9C3)),
+        filled: true,
+        fillColor: const Color(0xFF151521),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
       ),
-    );
-  }
+      onSubmitted: (v) {
+        if (v.isNotEmpty) {
+          showSearch(
+            context: context,
+            delegate: MovieSearchDelegate(movies, initialQuery: v),
+          );
+        }
+      },
+    ),
+  );
+
+  Widget _buildCarousel(List<Movie> movies) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 16.0),
+    child: carousel.CarouselSlider(
+      options: carousel.CarouselOptions(
+        height: 300,
+        autoPlay: true,
+        enlargeCenterPage: true,
+        viewportFraction: 0.8,
+      ),
+      items: movies.take(5).map((movie) {
+        return GestureDetector(
+          onTap: () =>
+              Navigator.pushNamed(context, '/details', arguments: movie),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: CachedNetworkImage(
+              imageUrl: movie.posterUrl,
+              fit: BoxFit.cover,
+              placeholder: (c, u) => const Center(
+                child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
+              ),
+              errorWidget: (c, u, e) => Container(
+                color: const Color(0xFF151521),
+                child: const Icon(Icons.broken_image, color: Colors.white38),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    ),
+  );
+
+  Widget _buildSectionHeader(String title, String? genre, VoidCallback onTap) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: onTap,
+              icon: const Icon(Icons.filter_list, color: Colors.white),
+              label: Text(
+                genre == null ? 'Bộ lọc' : 'Bộ lọc: $genre',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _buildMovieList(List<Movie> list) => SizedBox(
+    height: 220,
+    child: ListView.builder(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: list.length,
+      itemBuilder: (context, index) => _movieCard(list[index]),
+    ),
+  );
+
+  Widget _movieCard(Movie movie) => Container(
+    width: 130,
+    margin: const EdgeInsets.only(right: 12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: () =>
+                Navigator.pushNamed(context, '/details', arguments: movie),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: CachedNetworkImage(
+                imageUrl: movie.posterUrl,
+                fit: BoxFit.cover,
+                placeholder: (c, u) => const Center(
+                  child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
+                ),
+                errorWidget: (c, u, e) => Container(
+                  color: const Color(0xFF151521),
+                  child: const Icon(Icons.broken_image, color: Colors.white38),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          movie.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
+// ========== MOVIE SEARCH DELEGATE ==========
 class MovieSearchDelegate extends SearchDelegate<String> {
   final List<Movie> movies;
   final String initialQuery;
 
   MovieSearchDelegate(this.movies, {this.initialQuery = ''}) {
-    query = initialQuery.isNotEmpty ? initialQuery : '';
+    query = initialQuery;
   }
 
   @override
   List<Widget> buildActions(BuildContext context) => [
     IconButton(
-      icon: const Icon(Icons.clear, color: Color(0xFFEDEDED)),
+      icon: const Icon(Icons.clear, color: Colors.white),
       onPressed: () => query = '',
     ),
   ];
 
   @override
   Widget buildLeading(BuildContext context) => IconButton(
-    icon: const Icon(Icons.arrow_back, color: Color(0xFFEDEDED)),
+    icon: const Icon(Icons.arrow_back, color: Colors.white),
     onPressed: () => close(context, ''),
   );
 
   @override
   Widget buildResults(BuildContext context) {
     final results = _filterMovies(query);
-    if (results.isEmpty)
+    if (results.isEmpty) {
       return const Center(
         child: Text(
           'Không tìm thấy phim nào',
-          style: TextStyle(color: Color(0xFFB9B9C3)),
+          style: TextStyle(color: Colors.white70),
         ),
       );
+    }
     return ListView.builder(
       itemCount: results.length,
       itemBuilder: (context, index) {
         final movie = results[index];
         return ListTile(
-          tileColor: const Color(0xFF0B0B0F),
           leading: CachedNetworkImage(
             imageUrl: movie.posterUrl,
             width: 50,
             height: 75,
             fit: BoxFit.cover,
-            placeholder: (c, u) => const Center(
-              child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
-            ),
-            errorWidget: (c, u, e) => Container(
-              color: const Color(0xFF151521),
-              child: const Icon(
-                Icons.broken_image_outlined,
-                color: Color(0xFFB9B9C3),
-              ),
-            ),
           ),
-          title: Text(
-            movie.title,
-            style: const TextStyle(color: Color(0xFFEDEDED)),
-          ),
+          title: Text(movie.title, style: const TextStyle(color: Colors.white)),
           subtitle: Text(
             'Đạo diễn: ${movie.director}',
-            style: const TextStyle(color: Color(0xFFB9B9C3)),
+            style: const TextStyle(color: Colors.white70),
           ),
           onTap: () => Navigator.pushNamed(
             context,
@@ -741,7 +504,7 @@ class MovieSearchDelegate extends SearchDelegate<String> {
         return ListTile(
           title: Text(
             movie.title,
-            style: const TextStyle(color: Color(0xFFEDEDED)),
+            style: const TextStyle(color: Colors.white70),
           ),
           onTap: () => query = movie.title,
         );
@@ -752,13 +515,10 @@ class MovieSearchDelegate extends SearchDelegate<String> {
   List<Movie> _filterMovies(String q) {
     if (q.isEmpty) return [];
     final lower = q.toLowerCase();
-    return movies
-        .where(
-          (m) =>
-              m.title.toLowerCase().contains(lower) ||
-              m.director.toLowerCase().contains(lower) ||
-              m.actors.join(' ').toLowerCase().contains(lower),
-        )
-        .toList();
+    return movies.where((m) {
+      return m.title.toLowerCase().contains(lower) ||
+          m.director.toLowerCase().contains(lower) ||
+          m.actors.join(' ').toLowerCase().contains(lower);
+    }).toList();
   }
 }

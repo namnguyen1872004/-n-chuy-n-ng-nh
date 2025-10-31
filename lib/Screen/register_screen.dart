@@ -13,6 +13,7 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -21,6 +22,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _usernameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -36,12 +38,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passwordController.text.trim(),
         name: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
+        username: _usernameController.text.trim(),
       );
       // Navigate to Home and remove all previous routes so user can't go back to Register
       Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
     } on Exception catch (e) {
       String message = 'Lỗi khi đăng ký';
-      if (e is FirebaseAuthException) {
+      if (e.toString().contains('username-taken')) {
+        message = 'Tên đăng nhập đã được sử dụng. Vui lòng chọn tên khác.';
+      } else if (e is FirebaseAuthException) {
         switch (e.code) {
           case 'invalid-email':
             message = 'Email không hợp lệ.';
@@ -95,6 +100,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   validator: (v) =>
                       (v == null || v.isEmpty) ? 'Vui lòng nhập tên' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _usernameController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Tên đăng nhập',
+                    labelStyle: TextStyle(color: Colors.white60),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Vui lòng nhập tên đăng nhập'
+                      : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -14,9 +15,10 @@ class BookingScreen extends StatefulWidget {
 }
 
 class _BookingScreenState extends State<BookingScreen> {
-  // Demo “now”
-  final DateTime now = DateTime(2025, 10, 18, 2, 0, 0);
+  // Current time (kept updated so UI like "Hôm nay" updates in real-time)
+  DateTime now = DateTime.now();
 
+  Timer? _nowTimer;
   int selectedDayIndex = 0;
   int selectedCinemaIndex = 0;
   int selectedTimeIndex = 0;
@@ -44,11 +46,8 @@ class _BookingScreenState extends State<BookingScreen> {
   String _fmt(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
-  // Ngày cho selector
-  final List<DateTime> availableDates = List.generate(
-    6,
-    (i) => DateTime(2025, 10, 18).add(Duration(days: i)),
-  );
+  // Ngày cho selector (will be rebuilt from `now` so it follows real time)
+  List<DateTime> availableDates = [];
 
   // Danh sách rạp
   final List<Map<String, dynamic>> availableCinemas = [
@@ -108,7 +107,9 @@ class _BookingScreenState extends State<BookingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedDate = availableDates[selectedDayIndex];
+    final selectedDate = availableDates.isNotEmpty
+        ? availableDates[selectedDayIndex.clamp(0, availableDates.length - 1)]
+        : DateTime.now();
     final selectedCinema = availableCinemas[selectedCinemaIndex];
 
     // ✅ Lấy slot từ rạp đang chọn (nếu rạp có 'slots' riêng) hoặc fallback sang global _momoSlots
@@ -511,5 +512,41 @@ class _BookingScreenState extends State<BookingScreen> {
         ),
       ),
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // initialize dynamic availableDates based on current time
+    _rebuildAvailableDates();
+    // update `now` every minute so the "Hôm nay" marker and date list stay correct
+    _nowTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      final prevDay = DateTime(now.year, now.month, now.day);
+      now = DateTime.now();
+      final newDay = DateTime(now.year, now.month, now.day);
+      // If the day changed (midnight) rebuild availableDates and ensure selected index is valid
+      if (newDay.difference(prevDay).inDays != 0) {
+        setState(() {
+          _rebuildAvailableDates();
+          if (selectedDayIndex >= availableDates.length) selectedDayIndex = 0;
+        });
+      } else {
+        // still update `now` so "Hôm nay" label is accurate within the same day
+        setState(() {});
+      }
+    });
+  }
+
+  void _rebuildAvailableDates() {
+    final base = DateTime(now.year, now.month, now.day);
+    availableDates = List.generate(6, (i) => base.add(Duration(days: i)));
+    // make sure selectedDayIndex remains in range
+    if (selectedDayIndex >= availableDates.length) selectedDayIndex = 0;
+  }
+
+  @override
+  void dispose() {
+    _nowTimer?.cancel();
+    super.dispose();
   }
 }

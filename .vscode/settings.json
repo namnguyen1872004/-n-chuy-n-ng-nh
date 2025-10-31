@@ -1,3 +1,4 @@
 {
-  "cmake.sourceDirectory": "D:/lap_trinh_ung_dung/dat_ve_xem_phim/linux"
+  "cmake.sourceDirectory": "D:/lap_trinh_ung_dung/dat_ve_xem_phim/linux",
+  "CodeGPT.apiKey": "OpenAI"
 }
