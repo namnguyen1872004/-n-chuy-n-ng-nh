@@ -4,10 +4,10 @@ class Cinema {
   final String id;
   final String name;
   final String address;
-  final double distance; // Khoảng cách (km)
-  final String openHours; // Giờ mở cửa
-  final String imageUrl; // Ảnh rạp
-  final List<Snack> snacks; // Danh sách đồ ăn
+  final double distance;
+  final String openHours;
+  final String imageUrl;
+  final List<Snack> snacks;
 
   Cinema({
     required this.id,
@@ -19,8 +19,31 @@ class Cinema {
     required this.snacks,
   });
 
-  /// Parse từ Firebase Map sang Cinema
+  /// ✅ Parse từ Firebase Map sang Cinema
   factory Cinema.fromMap(Map<dynamic, dynamic> map) {
+    List<Snack> snackList = [];
+
+    final rawSnacks = map['snacks'];
+    if (rawSnacks != null) {
+      try {
+        if (rawSnacks is List) {
+          // ✅ snacks là List<Object?>
+          snackList = rawSnacks
+              .whereType<Map>() // loại bỏ phần tử null hoặc không phải map
+              .map((v) => Snack.fromMap(Map<String, dynamic>.from(v)))
+              .toList();
+        } else if (rawSnacks is Map) {
+          // ✅ snacks là Map<String, dynamic>
+          snackList = rawSnacks.values
+              .whereType<Map>()
+              .map((v) => Snack.fromMap(Map<String, dynamic>.from(v)))
+              .toList();
+        }
+      } catch (e) {
+        snackList = [];
+      }
+    }
+
     return Cinema(
       id: (map['id'] ?? '').toString(),
       name: (map['name'] ?? '').toString(),
@@ -30,19 +53,11 @@ class Cinema {
           : double.tryParse('${map['distance'] ?? 0}') ?? 0.0,
       openHours: (map['openHours'] ?? '').toString(),
       imageUrl: (map['imageUrl'] ?? '').toString(),
-      snacks: (map['snacks'] is List)
-          ? (map['snacks'] as List)
-                .map((v) => Snack.fromMap(Map<String, dynamic>.from(v)))
-                .toList()
-          : (map['snacks'] is Map)
-          ? (map['snacks'] as Map).values
-                .map((v) => Snack.fromMap(Map<String, dynamic>.from(v)))
-                .toList()
-          : [],
+      snacks: snackList,
     );
   }
 
-  /// Convert ngược để lưu lên Firebase (dùng List thay vì Map)
+  /// ✅ Convert ngược để lưu lên Firebase
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -51,7 +66,6 @@ class Cinema {
       'distance': distance,
       'openHours': openHours,
       'imageUrl': imageUrl,
-
       'snacks': snacks.map((s) => s.toMap()).toList(),
     };
   }

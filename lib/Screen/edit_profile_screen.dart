@@ -16,7 +16,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nameCtrl = TextEditingController();
   final TextEditingController _phoneCtrl = TextEditingController();
-  final TextEditingController _photoCtrl = TextEditingController();
 
   bool _loading = true;
   bool _saving = false;
@@ -31,7 +30,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
-    _photoCtrl.dispose();
     super.dispose();
   }
 
@@ -48,13 +46,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
     try {
       final snap = await _db.child('users').child(user.uid).get();
-      if (snap.exists) {
-        final data = snap.value as Map<dynamic, dynamic>;
+      if (snap.exists && snap.value is Map) {
+        final data = Map<dynamic, dynamic>.from(snap.value as Map);
         _nameCtrl.text = (data['name'] ?? '') as String;
         _phoneCtrl.text = (data['phone'] ?? '') as String;
-        _photoCtrl.text = (data['photoUrl'] ?? '') as String;
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Lỗi tải profile: $e')));
@@ -67,20 +65,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (!_formKey.currentState!.validate()) return;
     final user = _authService.currentUser;
     if (user == null) return;
+
     setState(() => _saving = true);
     try {
       await _db.child('users').child(user.uid).update({
         'name': _nameCtrl.text.trim(),
         'phone': _phoneCtrl.text.trim(),
-        'photoUrl': _photoCtrl.text.trim().isEmpty
-            ? null
-            : _photoCtrl.text.trim(),
       });
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Lưu thông tin thành công')));
       Navigator.of(context).pop(true);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Lỗi lưu thông tin: $e')));
@@ -112,8 +110,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         labelText: 'Họ và tên',
                         labelStyle: TextStyle(color: Colors.white60),
                       ),
-                      validator: (v) =>
-                          (v == null || v.isEmpty) ? 'Vui lòng nhập tên' : null,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Vui lòng nhập tên'
+                          : null,
+                      textInputAction: TextInputAction.next,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -123,15 +123,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         labelText: 'Số điện thoại',
                         labelStyle: TextStyle(color: Colors.white60),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _photoCtrl,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        labelText: 'URL ảnh đại diện (tùy chọn)',
-                        labelStyle: TextStyle(color: Colors.white60),
-                      ),
+                      keyboardType: TextInputType.phone,
                     ),
                     const SizedBox(height: 20),
                     SizedBox(
@@ -140,9 +132,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         onPressed: _saving ? null : _save,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF8B1E9B),
+                          minimumSize: const Size.fromHeight(48),
                         ),
                         child: _saving
-                            ? const CircularProgressIndicator()
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
                             : const Text('Lưu'),
                       ),
                     ),
