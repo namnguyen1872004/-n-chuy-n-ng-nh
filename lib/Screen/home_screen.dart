@@ -17,7 +17,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final DatabaseReference _database = FirebaseDatabase.instance.ref();
   int _selectedIndex = 0;
-  final TextEditingController _searchController = TextEditingController();
   String? _selectedGenre;
   String? _selectedGenreNow;
 
@@ -85,13 +84,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     showModalBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
         return DraggableScrollableSheet(
           expand: false,
-          maxChildSize: 0.9,
-          minChildSize: 0.5,
           initialChildSize: 0.7,
           builder: (context, scrollController) {
             return Container(
@@ -118,16 +114,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(
-                            Icons.close,
-                            color: Color(0xFFEDEDED),
-                          ),
+                          icon: const Icon(Icons.close, color: Colors.white),
                           onPressed: () => Navigator.pop(context),
                         ),
                       ],
                     ),
                   ),
-                  const Divider(color: Colors.white24, height: 1),
+                  const Divider(color: Colors.white24),
                   Expanded(
                     child: ListView.builder(
                       controller: scrollController,
@@ -196,24 +189,24 @@ class _HomeScreenState extends State<HomeScreen> {
     final comingSoon = movies.where((m) => m.releaseDate.isAfter(now)).toList()
       ..sort((a, b) => a.releaseDate.compareTo(b.releaseDate));
 
-    final filteredNowShowing = _selectedGenreNow == null
+    final filteredNow = _selectedGenreNow == null
         ? nowShowing
         : nowShowing
               .where(
                 (m) => m.genre
                     .split(',')
-                    .map((s) => s.trim())
+                    .map((e) => e.trim())
                     .contains(_selectedGenreNow),
               )
               .toList();
 
-    final filteredComingSoon = _selectedGenre == null
+    final filteredComing = _selectedGenre == null
         ? comingSoon
         : comingSoon
               .where(
                 (m) => m.genre
                     .split(',')
-                    .map((s) => s.trim())
+                    .map((e) => e.trim())
                     .contains(_selectedGenre),
               )
               .toList();
@@ -222,41 +215,51 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: const Color(0xFF0B0B0F),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0B0B0F),
-        title: const Text(
-          'PhimHay.net',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 24,
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search, color: Colors.white),
-            onPressed: () => showSearch(
-              context: context,
-              delegate: MovieSearchDelegate(movies),
+        elevation: 0,
+        title: SizedBox(
+          height: 42,
+          child: TextField(
+            onSubmitted: (v) {
+              if (v.isNotEmpty) {
+                showSearch(
+                  context: context,
+                  delegate: MovieSearchDelegate(movies, initialQuery: v),
+                );
+              }
+            },
+            cursorColor: const Color(0xFF8B1E9B),
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'Tìm phim, rạp chiếu...',
+              hintStyle: const TextStyle(color: Color(0xFFB9B9C3)),
+              prefixIcon: const Icon(Icons.search, color: Color(0xFFB9B9C3)),
+              filled: true,
+              fillColor: const Color(0xFF151521),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(vertical: 0),
             ),
           ),
-        ],
+        ),
       ),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            _buildSearchBar(),
             _buildCarousel(nowShowing),
             _buildSectionHeader(
               'Phim đang chiếu',
               _selectedGenreNow,
               () => _showGenreFilterSheet(forNowShowing: true),
             ),
-            _buildMovieList(filteredNowShowing),
+            _buildMovieList(filteredNow),
             _buildSectionHeader(
               'Phim sắp chiếu',
               _selectedGenre,
               () => _showGenreFilterSheet(forNowShowing: false),
             ),
-            _buildMovieList(filteredComingSoon),
+            _buildMovieList(filteredComing),
           ],
         ),
       ),
@@ -294,34 +297,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  Widget _buildSearchBar() => Padding(
-    padding: const EdgeInsets.all(16.0),
-    child: TextField(
-      controller: _searchController,
-      style: const TextStyle(color: Colors.white),
-      cursorColor: const Color(0xFF8B1E9B),
-      decoration: InputDecoration(
-        hintText: 'Tìm phim, rạp chiếu...',
-        hintStyle: const TextStyle(color: Color(0xFFB9B9C3)),
-        prefixIcon: const Icon(Icons.search, color: Color(0xFFB9B9C3)),
-        filled: true,
-        fillColor: const Color(0xFF151521),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-      ),
-      onSubmitted: (v) {
-        if (v.isNotEmpty) {
-          showSearch(
-            context: context,
-            delegate: MovieSearchDelegate(movies, initialQuery: v),
-          );
-        }
-      },
-    ),
-  );
 
   Widget _buildCarousel(List<Movie> movies) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 16.0),
@@ -444,6 +419,32 @@ class MovieSearchDelegate extends SearchDelegate<String> {
   }
 
   @override
+  ThemeData appBarTheme(BuildContext context) {
+    final base = Theme.of(context);
+    return base.copyWith(
+      scaffoldBackgroundColor: const Color(0xFF0B0B0F),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color(0xFF0B0B0F),
+        iconTheme: IconThemeData(color: Colors.white),
+        titleTextStyle: TextStyle(color: Colors.white, fontSize: 18),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        hintStyle: const TextStyle(color: Color(0xFFB9B9C3)),
+        filled: true,
+        fillColor: const Color(0xFF151521),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+      textTheme: const TextTheme(
+        titleLarge: TextStyle(color: Colors.white),
+        bodyMedium: TextStyle(color: Colors.white),
+      ),
+    );
+  }
+
+  @override
   List<Widget> buildActions(BuildContext context) => [
     IconButton(
       icon: const Icon(Icons.clear, color: Colors.white),
@@ -468,47 +469,74 @@ class MovieSearchDelegate extends SearchDelegate<String> {
         ),
       );
     }
-    return ListView.builder(
-      itemCount: results.length,
-      itemBuilder: (context, index) {
-        final movie = results[index];
-        return ListTile(
-          leading: CachedNetworkImage(
-            imageUrl: movie.posterUrl,
-            width: 50,
-            height: 75,
-            fit: BoxFit.cover,
-          ),
-          title: Text(movie.title, style: const TextStyle(color: Colors.white)),
-          subtitle: Text(
-            'Đạo diễn: ${movie.director}',
-            style: const TextStyle(color: Colors.white70),
-          ),
-          onTap: () => Navigator.pushNamed(
-            context,
-            '/details',
-            arguments: movie,
-          ).then((_) => close(context, movie.title)),
-        );
-      },
+
+    return AnimatedOpacity(
+      opacity: 1.0,
+      duration: const Duration(milliseconds: 250),
+      child: Container(
+        color: const Color(0xFF0B0B0F),
+        child: ListView.builder(
+          itemCount: results.length,
+          itemBuilder: (context, index) {
+            final movie = results[index];
+            return ListTile(
+              leading: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: CachedNetworkImage(
+                  imageUrl: movie.posterUrl,
+                  width: 55,
+                  height: 80,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              title: Text(
+                movie.title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              subtitle: Text(
+                'Đạo diễn: ${movie.director}',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              onTap: () {
+                Navigator.pushNamed(
+                  context,
+                  '/details',
+                  arguments: movie,
+                ).then((_) => close(context, movie.title));
+              },
+            );
+          },
+        ),
+      ),
     );
   }
 
   @override
   Widget buildSuggestions(BuildContext context) {
     final suggestions = _filterMovies(query);
-    return ListView.builder(
-      itemCount: suggestions.length,
-      itemBuilder: (context, index) {
-        final movie = suggestions[index];
-        return ListTile(
-          title: Text(
-            movie.title,
-            style: const TextStyle(color: Colors.white70),
-          ),
-          onTap: () => query = movie.title,
-        );
-      },
+    return AnimatedOpacity(
+      opacity: 1.0,
+      duration: const Duration(milliseconds: 250),
+      child: Container(
+        color: const Color(0xFF0B0B0F),
+        child: ListView.builder(
+          itemCount: suggestions.length,
+          itemBuilder: (context, index) {
+            final movie = suggestions[index];
+            return ListTile(
+              title: Text(
+                movie.title,
+                style: const TextStyle(color: Colors.white70, fontSize: 15),
+              ),
+              onTap: () => query = movie.title,
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -516,9 +544,9 @@ class MovieSearchDelegate extends SearchDelegate<String> {
     if (q.isEmpty) return [];
     final lower = q.toLowerCase();
     return movies.where((m) {
-      return m.title.toLowerCase().contains(lower) ||
-          m.director.toLowerCase().contains(lower) ||
-          m.actors.join(' ').toLowerCase().contains(lower);
+      final title = m.title.toLowerCase();
+      final director = m.director.toLowerCase();
+      return title.contains(lower) || director.contains(lower);
     }).toList();
   }
 }

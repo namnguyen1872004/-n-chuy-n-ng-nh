@@ -1,33 +1,64 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../models/movie.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import 'booking_screen.dart'; // Đảm bảo import đúng
 
-class MovieDetailScreen extends StatelessWidget {
-  final Movie movie;
-  final DateTime now = DateTime(
-    2025,
-    10,
-    18,
-    2,
-    27,
-    0,
-  ); // 02:27 AM +07, Saturday, October 18, 2025
+import '../models/movie.dart';
+import 'booking_screen.dart';
 
-  // Thêm 2 tham số tùy chọn cho trailer và gallery
-  final String? trailerUrl;
-  final List<String>? galleryImages;
-
-  MovieDetailScreen({
+class MovieDetailScreen extends StatefulWidget {
+  const MovieDetailScreen({
     super.key,
     required this.movie,
     this.trailerUrl,
     this.galleryImages,
   });
 
-  // Hàm xem ảnh full screen
+  final Movie movie;
+
+  /// Tuỳ chọn: nếu muốn override trailer trong movie
+  final String? trailerUrl;
+
+  /// Tuỳ chọn: nếu muốn override gallery trong movie
+  final List<String>? galleryImages;
+
+  @override
+  State<MovieDetailScreen> createState() => _MovieDetailScreenState();
+}
+
+class _MovieDetailScreenState extends State<MovieDetailScreen> {
+  // Ví dụ “thời điểm hiện tại” cố định để demo
+  final DateTime _now = DateTime(2025, 10, 18, 2, 27, 0);
+
+  YoutubePlayerController? _ytController;
+
+  // ---------- Lifecycle ----------
+  @override
+  void initState() {
+    super.initState();
+
+    // Lấy URL trailer: ưu tiên tham số truyền vào, fallback về movie.trailerUrl
+    final url = widget.trailerUrl ?? widget.movie.trailerUrl;
+    if (url != null && url.contains('youtube.com')) {
+      final id = YoutubePlayer.convertUrlToId(url);
+      if (id != null) {
+        _ytController = YoutubePlayerController(
+          initialVideoId: id,
+          flags: const YoutubePlayerFlags(autoPlay: false, mute: false),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    try {
+      _ytController?.pause();
+      _ytController?.dispose();
+    } catch (_) {}
+    super.dispose();
+  }
+
+  // ---------- Helpers ----------
   void _viewImageFullscreen(BuildContext context, String imageUrl) {
     Navigator.push(
       context,
@@ -53,21 +84,28 @@ class MovieDetailScreen extends StatelessWidget {
     );
   }
 
+  void _goToBooking() {
+    // RẤT QUAN TRỌNG: tạm dừng trailer trước khi rời màn
+    try {
+      _ytController?.pause();
+    } catch (_) {}
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BookingScreen(movie: widget.movie),
+      ),
+    );
+  }
+
+  // ---------- UI ----------
   @override
   Widget build(BuildContext context) {
-    // --- YouTube Controller ---
-    YoutubePlayerController? youtubeController;
-    if (movie.trailerUrl != null && movie.trailerUrl!.contains('youtube.com')) {
-      final videoId = YoutubePlayer.convertUrlToId(movie.trailerUrl!);
-      if (videoId != null) {
-        youtubeController = YoutubePlayerController(
-          initialVideoId: videoId,
-          flags: const YoutubePlayerFlags(autoPlay: false, mute: false),
-        );
-      }
-    }
+    final movie = widget.movie;
+    final isNowShowing = movie.releaseDate.isBefore(_now);
 
-    final isNowShowing = movie.releaseDate.isBefore(now);
+    // Nếu muốn dùng gallery override, lấy từ widget.galleryImages, không thì movie.galleryImages
+    final gallery = widget.galleryImages ?? movie.galleryImages;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B0B0F),
@@ -94,7 +132,7 @@ class MovieDetailScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Poster phim chính
+                // Poster chính
                 GestureDetector(
                   onTap: () => _viewImageFullscreen(context, movie.posterUrl),
                   child: Container(
@@ -132,7 +170,6 @@ class MovieDetailScreen extends StatelessWidget {
                               ),
                             ),
                           ),
-                          // gradient để chữ/overlay sau này nếu cần
                           Container(
                             height: 300,
                             decoration: const BoxDecoration(
@@ -166,7 +203,7 @@ class MovieDetailScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
 
-                      // Thông tin cơ bản
+                      // Info cơ bản
                       Row(
                         children: [
                           Text(
@@ -188,8 +225,6 @@ class MovieDetailScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
 
-                      // Thể loại
-                      const SizedBox(height: 2),
                       Text(
                         'Thể loại: ${movie.genre}',
                         style: const TextStyle(
@@ -200,9 +235,9 @@ class MovieDetailScreen extends StatelessWidget {
 
                       const SizedBox(height: 20),
 
-                      // === VIDEO TRAILER ===
-                      if (movie.trailerUrl != null &&
-                          movie.trailerUrl!.isNotEmpty)
+                      // Trailer
+                      if ((widget.trailerUrl ?? movie.trailerUrl)?.isNotEmpty ??
+                          false)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -215,12 +250,11 @@ class MovieDetailScreen extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 12),
-
-                            if (youtubeController != null)
+                            if (_ytController != null)
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
                                 child: YoutubePlayer(
-                                  controller: youtubeController!,
+                                  controller: _ytController!,
                                   showVideoProgressIndicator: true,
                                   progressIndicatorColor: Colors.redAccent,
                                 ),
@@ -255,9 +289,8 @@ class MovieDetailScreen extends StatelessWidget {
                           ],
                         ),
 
-                      // === GALLERY ẢNH PHIM ===
-                      if (movie.galleryImages != null &&
-                          movie.galleryImages!.isNotEmpty)
+                      // Gallery ảnh
+                      if (gallery != null && gallery.isNotEmpty)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -274,13 +307,12 @@ class MovieDetailScreen extends StatelessWidget {
                               height: 120,
                               child: ListView.builder(
                                 scrollDirection: Axis.horizontal,
-                                itemCount: movie.galleryImages!.length,
+                                itemCount: gallery.length,
                                 itemBuilder: (context, index) {
+                                  final img = gallery[index];
                                   return GestureDetector(
-                                    onTap: () => _viewImageFullscreen(
-                                      context,
-                                      movie.galleryImages![index],
-                                    ),
+                                    onTap: () =>
+                                        _viewImageFullscreen(context, img),
                                     child: Container(
                                       width: 160,
                                       margin: const EdgeInsets.only(right: 12),
@@ -299,7 +331,7 @@ class MovieDetailScreen extends StatelessWidget {
                                       child: ClipRRect(
                                         borderRadius: BorderRadius.circular(8),
                                         child: CachedNetworkImage(
-                                          imageUrl: movie.galleryImages![index],
+                                          imageUrl: img,
                                           fit: BoxFit.cover,
                                           placeholder: (context, url) =>
                                               const Center(
@@ -346,10 +378,10 @@ class MovieDetailScreen extends StatelessWidget {
                                 imageUrl: movie.directorImageUrl.isNotEmpty
                                     ? movie.directorImageUrl
                                     : 'https://via.placeholder.com/60?text=Director',
-                                imageBuilder: (context, imageProvider) =>
+                                imageBuilder: (context, provider) =>
                                     CircleAvatar(
                                       radius: 30,
-                                      backgroundImage: imageProvider,
+                                      backgroundImage: provider,
                                     ),
                                 placeholder: (context, url) =>
                                     const CircleAvatar(
@@ -362,10 +394,10 @@ class MovieDetailScreen extends StatelessWidget {
                                       ),
                                     ),
                                 errorWidget: (context, url, error) =>
-                                    CircleAvatar(
+                                    const CircleAvatar(
                                       radius: 30,
-                                      backgroundColor: const Color(0xFF151521),
-                                      child: const Icon(
+                                      backgroundColor: Color(0xFF151521),
+                                      child: Icon(
                                         Icons.broken_image_outlined,
                                         color: Color(0xFFB9B9C3),
                                       ),
@@ -377,13 +409,13 @@ class MovieDetailScreen extends StatelessWidget {
                                 child: Text(
                                   movie.director,
                                   textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                     fontSize: 13,
                                     color: Color(0xFFEDEDED),
                                     fontWeight: FontWeight.w500,
                                   ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
@@ -419,7 +451,6 @@ class MovieDetailScreen extends StatelessWidget {
                                               .isNotEmpty
                                       ? movie.actorsImageUrls[index]
                                       : 'https://via.placeholder.com/60?text=Actor';
-
                                   return Padding(
                                     padding: const EdgeInsets.only(right: 12.0),
                                     child: SizedBox(
@@ -429,13 +460,11 @@ class MovieDetailScreen extends StatelessWidget {
                                         children: [
                                           CachedNetworkImage(
                                             imageUrl: imageUrl,
-                                            imageBuilder:
-                                                (context, imageProvider) =>
-                                                    CircleAvatar(
-                                                      radius: 30,
-                                                      backgroundImage:
-                                                          imageProvider,
-                                                    ),
+                                            imageBuilder: (context, provider) =>
+                                                CircleAvatar(
+                                                  radius: 30,
+                                                  backgroundImage: provider,
+                                                ),
                                             placeholder: (context, url) =>
                                                 const CircleAvatar(
                                                   radius: 30,
@@ -456,12 +485,12 @@ class MovieDetailScreen extends StatelessWidget {
                                                   context,
                                                   url,
                                                   error,
-                                                ) => CircleAvatar(
+                                                ) => const CircleAvatar(
                                                   radius: 30,
-                                                  backgroundColor: const Color(
+                                                  backgroundColor: Color(
                                                     0xFF151521,
                                                   ),
-                                                  child: const Icon(
+                                                  child: Icon(
                                                     Icons.broken_image_outlined,
                                                     color: Color(0xFFB9B9C3),
                                                   ),
@@ -471,13 +500,13 @@ class MovieDetailScreen extends StatelessWidget {
                                           Text(
                                             movie.actors[index],
                                             textAlign: TextAlign.center,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
                                               fontSize: 13,
                                               color: Color(0xFFEDEDED),
                                               fontWeight: FontWeight.w500,
                                             ),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ],
                                       ),
@@ -501,7 +530,7 @@ class MovieDetailScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
 
-                      // Đánh giá sao
+                      // Đánh giá
                       if (isNowShowing)
                         Row(
                           children: [
@@ -525,8 +554,8 @@ class MovieDetailScreen extends StatelessWidget {
                             ),
                           ],
                         ),
-                      // Thêm khoảng trống để tránh button che nội dung
-                      const SizedBox(height: 120),
+
+                      const SizedBox(height: 120), // chừa chỗ cho nút dưới
                     ],
                   ),
                 ),
@@ -534,7 +563,7 @@ class MovieDetailScreen extends StatelessWidget {
             ),
           ),
 
-          // === NÚT MUA VÉ - STICKY BOTTOM ===
+          // Nút mua vé
           if (isNowShowing)
             Positioned(
               left: 0,
@@ -557,14 +586,7 @@ class MovieDetailScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(16.0),
                 child: SafeArea(
                   child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => BookingScreen(movie: movie),
-                        ),
-                      );
-                    },
+                    onPressed: _goToBooking,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF8B1E9B),
                       foregroundColor: Colors.white,

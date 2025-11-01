@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../models/snack_model.dart';
 
 class SnackScreen extends StatefulWidget {
@@ -29,6 +31,168 @@ class _SnackScreenState extends State<SnackScreen> {
     ).showSnackBar(SnackBar(content: Text('Đã thêm ${snack.name} vào giỏ')));
   }
 
+  double get totalPrice =>
+      cartItems.fold(0, (sum, item) => sum + item.price * 1000);
+
+  // ⚡ Hiển thị giỏ hàng
+  void _openCartDialog() {
+    if (cartItems.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Giỏ hàng trống')));
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF151521),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Giỏ hàng của bạn',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ...cartItems.map(
+                (snack) => ListTile(
+                  dense: true,
+                  title: Text(
+                    snack.name,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  subtitle: Text(
+                    '${snack.price}k VNĐ',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ),
+              ),
+              const Divider(color: Colors.white30),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Tổng cộng:',
+                    style: TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                  Text(
+                    '${NumberFormat("#,##0").format(totalPrice)} đ',
+                    style: const TextStyle(
+                      color: Colors.yellowAccent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Future.delayed(
+                    const Duration(milliseconds: 200),
+                    _showQrSheet,
+                  );
+                },
+                icon: const Icon(Icons.qr_code),
+                label: const Text('Thanh toán QR'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF8B1E9B),
+                  minimumSize: const Size(double.infinity, 45),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ⚡ Dùng BottomSheet để tránh đơ UI
+  void _showQrSheet() {
+    final orderId = DateTime.now().millisecondsSinceEpoch.toString();
+    final snackNames = cartItems.map((e) => e.name).join(', ');
+    final total = NumberFormat("#,##0").format(totalPrice);
+    final qrData =
+        'Thanh toán bắp nước\nMã đơn: $orderId\nMón: $snackNames\nTổng tiền: $total đ';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E2D),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Mã QR Thanh Toán',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.all(8),
+              child: QrImageView(
+                data: qrData,
+                version: QrVersions.auto,
+                size: 220.0,
+                backgroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Tổng: $total đ',
+              style: const TextStyle(
+                color: Colors.yellowAccent,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Mã đơn: $orderId',
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _showSuccess(orderId);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF8B1E9B),
+                minimumSize: const Size(double.infinity, 45),
+              ),
+              child: const Text('Xác nhận thanh toán'),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSuccess(String orderId) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✅ Thanh toán thành công! Mã đơn: $orderId'),
+        backgroundColor: Colors.green,
+      ),
+    );
+    setState(() {
+      cartItems.clear();
+      cartCount = 0;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -50,13 +214,7 @@ class _SnackScreenState extends State<SnackScreen> {
             children: [
               IconButton(
                 icon: const Icon(Icons.shopping_cart, color: Color(0xFFEDEDED)),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Xem giỏ hàng (chưa hoàn thiện)'),
-                    ),
-                  );
-                },
+                onPressed: _openCartDialog,
               ),
               if (cartCount > 0)
                 Positioned(
@@ -99,20 +257,11 @@ class _SnackScreenState extends State<SnackScreen> {
                 );
               }
 
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Center(
-                    child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
-                  ),
-                );
-              }
-
               if (!snapshot.hasData || snapshot.data!.snapshot.value == null) {
                 return const Padding(
                   padding: EdgeInsets.all(16.0),
                   child: Text(
-                    'Không có dữ liệu rạp trong Firebase!',
+                    'Không có dữ liệu rạp!',
                     style: TextStyle(color: Color(0xFFB9B9C3)),
                   ),
                 );
@@ -120,7 +269,6 @@ class _SnackScreenState extends State<SnackScreen> {
 
               final rawData = snapshot.data!.snapshot.value;
               Map<String, dynamic> cinemasMap = {};
-
               if (rawData is Map) {
                 cinemasMap = Map<String, dynamic>.from(rawData);
               } else if (rawData is List) {
@@ -153,21 +301,19 @@ class _SnackScreenState extends State<SnackScreen> {
                       style: TextStyle(color: Color(0xFFB9B9C3)),
                     ),
                     items: cinemasMap.entries.map((entry) {
-                      final cinemaData = Map<String, dynamic>.from(entry.value);
+                      final data = Map<String, dynamic>.from(entry.value);
                       return DropdownMenuItem<String>(
                         value: entry.key,
                         child: Text(
-                          cinemaData['name'] ?? 'Không có tên',
+                          data['name'] ?? 'Không có tên',
                           style: const TextStyle(color: Color(0xFFEDEDED)),
                         ),
                       );
                     }).toList(),
-                    onChanged: (String? newValue) {
-                      if (newValue != null) {
-                        setState(() {
-                          selectedCinemaId = newValue;
-                        });
-                      }
+                    onChanged: (newValue) {
+                      setState(() {
+                        selectedCinemaId = newValue ?? '';
+                      });
                     },
                     isExpanded: true,
                     underline: const SizedBox(),
@@ -186,60 +332,6 @@ class _SnackScreenState extends State<SnackScreen> {
             },
           ),
 
-          // --- Ô tìm kiếm ---
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 8.0,
-            ),
-            child: TextField(
-              style: const TextStyle(color: Color(0xFFEDEDED)),
-              cursorColor: const Color(0xFF8B1E9B),
-              decoration: InputDecoration(
-                hintText: 'Tìm bắp nước...',
-                hintStyle: const TextStyle(color: Color(0xFFB9B9C3)),
-                prefixIcon: const Icon(Icons.search, color: Color(0xFFB9B9C3)),
-                filled: true,
-                fillColor: const Color(0xFF151521),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF222230)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF222230)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF8B1E9B)),
-                ),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  searchQuery = value;
-                });
-              },
-            ),
-          ),
-
-          // --- Bộ lọc ---
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 8.0,
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildFilterChip('Tất cả', 'Tất cả'),
-                  _buildFilterChip('Khuyến mãi', 'Khuyến mãi'),
-                  _buildFilterChip('Phổ biến', 'Phổ biến'),
-                ],
-              ),
-            ),
-          ),
-
           // --- Danh sách snack ---
           Expanded(
             child: selectedCinemaId.isEmpty
@@ -254,23 +346,6 @@ class _SnackScreenState extends State<SnackScreen> {
                         .child('cinemas/$selectedCinemaId/snacks')
                         .onValue,
                     builder: (context, snapshot) {
-                      if (snapshot.hasError) {
-                        return Center(
-                          child: Text(
-                            'Lỗi: ${snapshot.error}',
-                            style: const TextStyle(color: Color(0xFFEDEDED)),
-                          ),
-                        );
-                      }
-
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFF8B1E9B),
-                          ),
-                        );
-                      }
-
                       if (!snapshot.hasData ||
                           snapshot.data!.snapshot.value == null) {
                         return const Center(
@@ -281,62 +356,29 @@ class _SnackScreenState extends State<SnackScreen> {
                         );
                       }
 
-                      final rawData = snapshot.data!.snapshot.value;
+                      final data = snapshot.data!.snapshot.value;
                       Map<dynamic, dynamic> snacksMap = {};
-
-                      if (rawData is Map) {
-                        snacksMap = rawData;
-                      } else if (rawData is List) {
-                        for (int i = 0; i < rawData.length; i++) {
-                          if (rawData[i] != null) {
-                            snacksMap[i] = rawData[i];
-                          }
+                      if (data is Map) {
+                        snacksMap = data;
+                      } else if (data is List) {
+                        for (int i = 0; i < data.length; i++) {
+                          if (data[i] != null) snacksMap[i] = data[i];
                         }
                       }
 
                       final snacks = snacksMap.entries.map((entry) {
-                        final snackData = Map<String, dynamic>.from(
-                          entry.value,
-                        );
+                        final s = Map<String, dynamic>.from(entry.value);
                         return Snack(
-                          id: snackData['id']?.toString() ?? '',
-                          name: snackData['name']?.toString() ?? '',
-                          price: (snackData['price'] ?? 0.0).toDouble(),
-                          imageUrl: snackData['imageUrl']?.toString() ?? '',
-                          description:
-                              snackData['description']?.toString() ?? '',
+                          id: s['id']?.toString() ?? '',
+                          name: s['name']?.toString() ?? '',
+                          price: (s['price'] ?? 0.0).toDouble(),
+                          imageUrl: s['imageUrl']?.toString() ?? '',
+                          description: s['description']?.toString() ?? '',
                         );
                       }).toList();
-
-                      // Lọc sản phẩm
-                      final filteredSnacks = snacks.where((snack) {
-                        final matchesFilter =
-                            filter == 'Tất cả' ||
-                            (filter == 'Khuyến mãi' && snack.price < 70.0) ||
-                            (filter == 'Phổ biến' &&
-                                snack.name.contains('Combo'));
-                        final matchesSearch =
-                            searchQuery.isEmpty ||
-                            snack.name.toLowerCase().contains(
-                              searchQuery.toLowerCase(),
-                            ) ||
-                            snack.description.toLowerCase().contains(
-                              searchQuery.toLowerCase(),
-                            );
-                        return matchesFilter && matchesSearch;
-                      }).toList();
-
-                      if (filteredSnacks.isEmpty) {
-                        return const Center(
-                          child: Text(
-                            'Không có sản phẩm phù hợp',
-                            style: TextStyle(color: Color(0xFFB9B9C3)),
-                          ),
-                        );
-                      }
 
                       return GridView.builder(
-                        padding: const EdgeInsets.all(8.0),
+                        padding: const EdgeInsets.all(8),
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: 2,
@@ -344,47 +386,13 @@ class _SnackScreenState extends State<SnackScreen> {
                               crossAxisSpacing: 8,
                               mainAxisSpacing: 8,
                             ),
-                        itemCount: filteredSnacks.length,
-                        itemBuilder: (context, index) {
-                          final snack = filteredSnacks[index];
-                          return _buildSnackCard(snack);
-                        },
+                        itemCount: snacks.length,
+                        itemBuilder: (context, i) => _buildSnackCard(snacks[i]),
                       );
                     },
                   ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String label, String value) {
-    final bool selected = filter == value;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8.0),
-      child: ChoiceChip(
-        label: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: selected ? Colors.white : const Color(0xFFEDEDED),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        selected: selected,
-        onSelected: (s) {
-          setState(() {
-            filter = value;
-          });
-        },
-        backgroundColor: const Color(0xFF151521),
-        selectedColor: const Color(0xFF8B1E9B),
-        shape: RoundedRectangleBorder(
-          side: BorderSide(
-            color: selected ? const Color(0xFF8B1E9B) : const Color(0xFF222230),
-          ),
-          borderRadius: BorderRadius.circular(24),
-        ),
       ),
     );
   }
@@ -395,13 +403,6 @@ class _SnackScreenState extends State<SnackScreen> {
         color: const Color(0xFF151521),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFF222230)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.35),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -437,48 +438,20 @@ class _SnackScreenState extends State<SnackScreen> {
                     fontWeight: FontWeight.bold,
                     color: Color(0xFFEDEDED),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  snack.description,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFFB9B9C3),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  '${snack.price}k VNĐ',
+                  style: const TextStyle(color: Color(0xFF8B1E9B)),
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '${snack.price}k VNĐ',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF8B1E9B),
-                      ),
-                    ),
-                    ElevatedButton(
-                      onPressed: () => addToCart(snack),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B1E9B),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 6,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: const Text('Thêm', style: TextStyle(fontSize: 12)),
-                    ),
-                  ],
+                const SizedBox(height: 6),
+                ElevatedButton(
+                  onPressed: () => addToCart(snack),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF8B1E9B),
+                    minimumSize: const Size(double.infinity, 35),
+                  ),
+                  child: const Text('Thêm'),
                 ),
               ],
             ),

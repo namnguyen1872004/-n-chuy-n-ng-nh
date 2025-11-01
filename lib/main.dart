@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-// import 'package:firebase_auth/firebase_auth.dart';
 import 'package:dat_ve_xem_phim/firebase_options.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 // Screens
 import 'Screen/home_screen.dart';
@@ -16,6 +16,7 @@ import 'Screen/booking_screen.dart';
 import 'Screen/seat_selection_screen.dart';
 import 'Screen/movie_selection_screen.dart';
 import 'Screen/showtimes_screen.dart';
+import 'Screen/ticket_manager_screen.dart'; // 🆕 Thêm màn hình quản lý vé
 
 // Models
 import 'models/movie.dart';
@@ -23,7 +24,12 @@ import 'models/cinema_model.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // ✅ Khởi tạo Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // ✅ (Tùy chọn) Cấu hình Realtime Database persistence (nếu cần offline)
+  FirebaseDatabase.instance.setPersistenceEnabled(true);
+
   runApp(const MyApp());
 }
 
@@ -56,9 +62,10 @@ class MyApp extends StatelessWidget {
             return _mat(const CinemaScreen());
           case '/snack':
             return _mat(const SnackScreen());
+          case '/tickets': // 🆕 Thêm route quản lý vé
+            return _mat(const TicketManagerScreen());
 
           // ===== Dynamic =====
-
           case '/details':
             {
               final args = settings.arguments;

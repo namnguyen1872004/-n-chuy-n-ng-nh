@@ -7,6 +7,9 @@ import '../models/profile_model.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
 
+// 🆕 Import thêm màn hình quản lý vé
+import 'ticket_manager_screen.dart';
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -47,7 +50,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await Firebase.initializeApp();
   }
 
-  // --- Lấy dữ liệu người dùng từ Firebase ---
   Future<void> _fetchProfileData() async {
     if (_currentUser == null) return;
     try {
@@ -79,7 +81,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- Lấy danh sách giao dịch ---
   Future<void> _fetchTransactions() async {
     if (_currentUser == null) return;
     try {
@@ -226,7 +227,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         children: [
           _menuItem(Icons.history, 'Lịch sử giao dịch', () {}),
-          _menuItem(Icons.confirmation_number, 'Quản lý vé', () {}),
+
+          // 🆕 Khi nhấn vào đây → chuyển đến trang Quản lý vé
+          _menuItem(Icons.confirmation_number, 'Quản lý vé', () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TicketManagerScreen()),
+            );
+          }),
+
           _menuItem(Icons.local_offer, 'Ưu đãi cá nhân', () {}),
           _menuItem(Icons.settings, 'Cài đặt', () async {
             final res = await Navigator.pushNamed(context, '/edit-profile');

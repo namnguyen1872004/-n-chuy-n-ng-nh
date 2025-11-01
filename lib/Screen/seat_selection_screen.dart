@@ -1,10 +1,10 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
-import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
-import 'package:vnpay_flutter/vnpay_flutter.dart';
+import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 import '../models/movie.dart';
-import '../models/seat_model.dart'; // ✅ thêm import model
 
 class SeatSelectionScreen extends StatefulWidget {
   final Movie movie;
@@ -25,176 +25,234 @@ class SeatSelectionScreen extends StatefulWidget {
 }
 
 class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
-  // ================== VNPay SANDBOX CONFIG ==================
-  static const String _vnpBaseUrl =
-      'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
-  static const String _vnpTmnCode = 'P796156C';
-  static const String _vnpHashSecret = 'FM0JPA4DMKKM1Z3ATT4MMNOJI15CF2FJ';
-  static const String _vnpReturnUrl = 'https://sandbox.vnpayment.vn/return';
+  static const int _rows = 10;
+  static const int _cols = 8;
 
-  // ================== DATA GHẾ ==================
-  final List<List<String>> seats = List.generate(
-    10,
-    (row) => List.generate(8, (col) => 'available'),
-  );
-  final Set<String> selectedSeats = <String>{};
-
-  final Map<String, String> bookedSeats = {
-    'A1': 'booked',
-    'B2': 'booked',
-    'C3': 'booked',
-    'D4': 'booked',
-    'E5': 'booked',
-  };
+  late final List<List<String>> seats;
+  final Set<String> selectedSeats = {};
 
   @override
   void initState() {
     super.initState();
-    for (var seat in bookedSeats.keys) {
-      final row = seat[0];
-      final col = int.parse(seat.substring(1)) - 1;
-      if (row.codeUnitAt(0) >= 'A'.codeUnitAt(0) &&
-          row.codeUnitAt(0) <= 'J'.codeUnitAt(0) &&
-          col >= 0 &&
-          col < 8) {
-        seats[row.codeUnitAt(0) - 'A'.codeUnitAt(0)][col] = bookedSeats[seat]!;
-      }
+    seats = List.generate(_rows, (_) => List.filled(_cols, 'available'));
+    for (int c = 0; c < _cols; c++) {
+      seats[0][c] = 'vip';
+      seats[_rows - 1][c] = 'vip';
     }
-    for (int col = 0; col < 8; col++) {
-      seats[0][col] = 'vip';
-      seats[9][col] = 'vip';
+    const booked = ['A1', 'B2', 'C3', 'D4', 'E5'];
+    for (final id in booked) {
+      final row = id.codeUnitAt(0) - 65;
+      final col = int.parse(id.substring(1)) - 1;
+      seats[row][col] = 'booked';
     }
   }
 
-  void toggleSeat(String seatId) {
+  void _toggleSeat(int row, int col) {
+    final seatId = '${String.fromCharCode(65 + row)}${col + 1}';
+    if (seats[row][col] == 'booked') return;
     setState(() {
-      if (seats[seatId[0].codeUnitAt(0) -
-              'A'.codeUnitAt(0)][int.parse(seatId.substring(1)) - 1] !=
-          'booked') {
-        if (selectedSeats.contains(seatId)) {
-          selectedSeats.remove(seatId);
-        } else {
-          selectedSeats.add(seatId);
-        }
-      }
+      selectedSeats.contains(seatId)
+          ? selectedSeats.remove(seatId)
+          : selectedSeats.add(seatId);
     });
   }
 
-  double calculateTotal() {
+  double _calculateTotal() {
     double total = 0;
-    for (var seatId in selectedSeats) {
-      final row = seatId[0];
-      final col = int.parse(seatId.substring(1)) - 1;
-      final seatStatus = seats[row.codeUnitAt(0) - 'A'.codeUnitAt(0)][col];
-      total += (seatStatus == 'vip') ? 150000 : 100000;
+    for (final id in selectedSeats) {
+      final row = id.codeUnitAt(0) - 65;
+      final col = int.parse(id.substring(1)) - 1;
+      total += seats[row][col] == 'vip' ? 150000 : 100000;
     }
     return total;
   }
 
-  String _fmtVnpDate(DateTime dt) => DateFormat('yyyyMMddHHmmss').format(dt);
-  String _fmtTimeOfDay(TimeOfDay t) =>
-      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-
-  String _phpUrlEncode(String input) =>
-      Uri.encodeQueryComponent(input).replaceAll('%20', '+');
-
-  String _signRaw(Map<String, String> params, String secret) {
-    final keys = params.keys.toList()..sort();
-    final raw = keys.map((k) => '$k=${params[k]}').join('&');
-    final hmacSha512 = Hmac(sha512, utf8.encode(secret));
-    return hmacSha512.convert(utf8.encode(raw)).toString();
+  // ✅ Tạo QR trong isolate để tránh lag
+  Future<QrPainter> _generateQrPainter(String data) async {
+    return await compute((String text) {
+      return QrPainter(
+        data: text,
+        version: QrVersions.auto,
+        color: const Color(0xFF000000),
+        emptyColor: const Color(0xFFFFFFFF),
+      );
+    }, data);
   }
 
-  String _buildVnpPaymentUrl({
-    required String orderInfo,
-    required String ipAddr,
-    required int amountTimes100,
-    required DateTime create,
-    required DateTime expire,
-  }) {
-    final txnRef = DateTime.now().millisecondsSinceEpoch.toString();
-    final params = <String, String>{
-      'vnp_Version': '2.1.0',
-      'vnp_Command': 'pay',
-      'vnp_TmnCode': _vnpTmnCode,
-      'vnp_Amount': amountTimes100.toString(),
-      'vnp_CurrCode': 'VND',
-      'vnp_TxnRef': txnRef,
-      'vnp_OrderInfo': orderInfo,
-      'vnp_OrderType': 'other',
-      'vnp_Locale': 'vn',
-      'vnp_ReturnUrl': _vnpReturnUrl,
-      'vnp_IpAddr': ipAddr,
-      'vnp_CreateDate': _fmtVnpDate(create),
-      'vnp_ExpireDate': _fmtVnpDate(expire),
-    };
+  // ✅ Hiển thị QR mượt, không treo UI
+  void _showQrDialog(double total) {
+    final orderId = DateTime.now().millisecondsSinceEpoch.toString();
+    final qrData = 'PAY:${widget.movie.title}|$orderId|${total.toInt()}';
+    final infoText =
+        '''
+Ngân hàng: BIDV
+STK: 21510003732555
+Tên: Nguyễn Hoài Nam
+Số tiền: ${NumberFormat('#,##0').format(total)} đ
+Nội dung: ${widget.movie.title} - $orderId
+''';
 
-    final secureHash = _signRaw(params, _vnpHashSecret);
-    final keys = params.keys.toList()..sort();
-    final query = keys
-        .map((k) => '${_phpUrlEncode(k)}=${_phpUrlEncode(params[k] ?? '')}')
-        .join('&');
-    return '$_vnpBaseUrl?$query&vnp_SecureHashType=HmacSHA512&vnp_SecureHash=$secureHash';
+    final qrFuture = _generateQrPainter(qrData);
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1a1a2e),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Quét mã QR thanh toán',
+          style: TextStyle(color: Colors.white, fontSize: 18),
+        ),
+        content: FutureBuilder<QrPainter>(
+          future: qrFuture,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const SizedBox(
+                height: 120,
+                child: Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+              );
+            }
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: CustomPaint(
+                    size: const Size(220, 220),
+                    painter: snapshot.data!,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '💰 ${NumberFormat('#,##0').format(total)} đ',
+                  style: const TextStyle(
+                    color: Colors.yellowAccent,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Mã đơn: $orderId',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  infoText,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                const SizedBox(height: 14),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _simulatePayment(orderId);
+                  },
+                  icon: const Icon(Icons.qr_code_scanner),
+                  label: const Text('Giả lập quét thành công'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF8B1E9B),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  // ✅ Lưu thông tin vé vào Firebase Realtime Database
+  Future<void> _saveTicketToDatabase(String orderId, double total) async {
+    try {
+      final db = FirebaseDatabase.instance.ref();
+
+      await db.child('tickets/$orderId').set({
+        'orderId': orderId,
+        'movieTitle': widget.movie.title,
+        'cinema': widget.selectedCinema,
+        'date': widget.selectedDate.toIso8601String(),
+        'time':
+            '${widget.selectedTime.hour.toString().padLeft(2, '0')}:${widget.selectedTime.minute.toString().padLeft(2, '0')}',
+        'selectedSeats': selectedSeats.toList(),
+        'total': total,
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+
+      debugPrint('🎟 Vé đã được lưu vào Firebase Realtime Database thành công');
+    } catch (e) {
+      debugPrint('🔥 Lỗi khi lưu vé vào Realtime Database: $e');
+    }
+  }
+
+  Future<void> _simulatePayment(String orderId) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Dialog(
+        backgroundColor: Colors.transparent,
+        child: Center(child: CircularProgressIndicator(color: Colors.white)),
+      ),
+    );
+    await Future.delayed(const Duration(seconds: 2));
+    if (mounted) Navigator.pop(context);
+
+    // 🟢 Lưu vé vào Firebase sau khi thanh toán thành công
+    await _saveTicketToDatabase(orderId, _calculateTotal());
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✅ Thanh toán thành công! Vé đã được lưu vào Firebase!'),
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final total = calculateTotal();
-    final showDate =
-        '${widget.selectedDate.day.toString().padLeft(2, '0')}/${widget.selectedDate.month.toString().padLeft(2, '0')}/${widget.selectedDate.year}';
-    final showTime = _fmtTimeOfDay(widget.selectedTime);
+    final total = _calculateTotal();
+    final date = DateFormat('dd/MM/yyyy').format(widget.selectedDate);
+    final time =
+        '${widget.selectedTime.hour.toString().padLeft(2, '0')}:${widget.selectedTime.minute.toString().padLeft(2, '0')}';
 
     return Scaffold(
       backgroundColor: const Color(0xFF1a1a2e),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1a1a2e),
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
         title: Text(
           widget.movie.title,
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
-            fontSize: 20,
           ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
         ),
       ),
-
-      // ✅ Toàn bộ phần body đã khôi phục đầy đủ
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildCinemaInfo(showDate, showTime),
-                    const SizedBox(height: 32),
-                    _buildScreen(),
-                    const SizedBox(height: 32),
-                    _buildSeatLayout(),
-                    const SizedBox(height: 32),
-                    _buildLegend(),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          _buildBottomBar(total, showDate, showTime),
-        ],
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            _buildInfo(date, time),
+            const SizedBox(height: 24),
+            _buildScreen(),
+            const SizedBox(height: 20),
+            _buildSeatGrid(),
+            const SizedBox(height: 16),
+            _buildLegend(),
+          ],
+        ),
       ),
+      bottomNavigationBar: _buildBottom(total),
     );
   }
 
-  Widget _buildCinemaInfo(String showDate, String showTime) => Container(
-    padding: const EdgeInsets.all(16.0),
+  Widget _buildInfo(String date, String time) => Container(
+    padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
       gradient: LinearGradient(
         colors: [
@@ -203,391 +261,180 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
         ],
       ),
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(
-        color: const Color(0xFF8B1E9B).withOpacity(0.3),
-        width: 1,
-      ),
+      border: Border.all(color: const Color(0xFF8B1E9B).withOpacity(0.3)),
     ),
-    child: Row(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.location_on,
-                    color: Colors.white70,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      widget.selectedCinema,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.calendar_today,
-                    color: Colors.white70,
-                    size: 14,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    showDate,
-                    style: const TextStyle(fontSize: 13, color: Colors.white70),
-                  ),
-                  const SizedBox(width: 16),
-                  const Icon(
-                    Icons.access_time,
-                    color: Colors.white70,
-                    size: 14,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    showTime,
-                    style: const TextStyle(fontSize: 13, color: Colors.white70),
-                  ),
-                ],
-              ),
-            ],
+        Text(
+          widget.selectedCinema,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
           ),
+        ),
+        Text(
+          'Ngày: $date  |  Giờ: $time',
+          style: const TextStyle(color: Colors.white70, fontSize: 13),
         ),
       ],
     ),
   );
 
   Widget _buildScreen() => Center(
-    child: Column(
-      children: [
-        Container(
-          width: MediaQuery.of(context).size.width * 0.7,
-          height: 8,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Colors.transparent,
-                const Color(0xFF8B1E9B).withOpacity(0.6),
-                Colors.transparent,
-              ],
-            ),
-            borderRadius: BorderRadius.circular(4),
-          ),
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      width: 230,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF8B1E9B), Color(0xFF4A1E5A)],
         ),
-        const SizedBox(height: 4),
-        Container(
-          width: MediaQuery.of(context).size.width * 0.85,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0x4D8B1E9B), Color(0x1A8B1E9B)],
-            ),
-            borderRadius: BorderRadius.only(
-              bottomLeft: Radius.circular(80),
-              bottomRight: Radius.circular(80),
-            ),
-          ),
-          child: const Text(
-            'MÀN HÌNH',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white70,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-              letterSpacing: 3,
-            ),
-          ),
+      ),
+      child: const Text(
+        'MÀN HÌNH',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
         ),
-      ],
+      ),
     ),
   );
 
-  Widget _buildSeatLayout() => Center(
-    child: Column(
-      children: List.generate(10, (rowIndex) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: 30,
-                child: Text(
-                  String.fromCharCode('A'.codeUnitAt(0) + rowIndex),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
+  Widget _buildSeatGrid() {
+    const tile = 30.0;
+    const gap = 6.0;
+    return Center(
+      child: SizedBox(
+        width: _cols * (tile + gap) + gap,
+        height: _rows * (tile + gap) + gap,
+        child: GridView.builder(
+          padding: EdgeInsets.zero,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: _cols,
+            mainAxisSpacing: gap,
+            crossAxisSpacing: gap,
+          ),
+          itemCount: _rows * _cols,
+          itemBuilder: (_, i) {
+            final r = i ~/ _cols;
+            final c = i % _cols;
+            final id = '${String.fromCharCode(65 + r)}${c + 1}';
+            final status = seats[r][c];
+            final selected = selectedSeats.contains(id);
+
+            Color color;
+            if (status == 'booked') {
+              color = Colors.grey.shade800;
+            } else if (status == 'vip') {
+              color = selected ? Colors.yellow : Colors.yellow.withOpacity(0.4);
+            } else {
+              color = selected
+                  ? const Color(0xFF8B1E9B)
+                  : const Color(0xFF16213E);
+            }
+
+            return InkWell(
+              onTap: status == 'booked' ? null : () => _toggleSeat(r, c),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.white24),
                 ),
               ),
-              const SizedBox(width: 8),
-              ...List.generate(8, (colIndex) {
-                final seatId =
-                    '${String.fromCharCode('A'.codeUnitAt(0) + rowIndex)}${colIndex + 1}';
-                final seatStatus = seats[rowIndex][colIndex];
-                final isSelected = selectedSeats.contains(seatId);
-
-                Color seatColor;
-                Color borderColor;
-                IconData seatIcon;
-
-                if (seatStatus == 'booked') {
-                  seatColor = const Color(0xFF2d2d44);
-                  borderColor = const Color(0xFF2d2d44);
-                  seatIcon = Icons.event_seat;
-                } else if (seatStatus == 'vip') {
-                  seatColor = isSelected
-                      ? const Color(0xFFFFB800)
-                      : const Color(0xFFFFB800).withOpacity(0.3);
-                  borderColor = const Color(
-                    0xFFFFB800,
-                  ).withOpacity(isSelected ? 1 : 0.5);
-                  seatIcon = Icons.weekend;
-                } else {
-                  seatColor = isSelected
-                      ? const Color(0xFF8B1E9B)
-                      : const Color(0xFF16213e).withOpacity(0.8);
-                  borderColor = const Color(
-                    0xFF0f3460,
-                  ).withOpacity(isSelected ? 1 : 0.5);
-                  seatIcon = Icons.event_seat;
-                }
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                  child: GestureDetector(
-                    onTap: () => toggleSeat(seatId),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: seatColor,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: borderColor,
-                          width: isSelected ? 2 : 1,
-                        ),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          seatIcon,
-                          color: seatStatus == 'booked'
-                              ? Colors.white24
-                              : Colors.white,
-                          size: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ],
-          ),
-        );
-      }),
-    ),
-  );
-
-  Widget _buildLegend() => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: const Color(0xFF16213e).withOpacity(0.5),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
-      children: [
-        _buildLegendItem(
-          const Color(0xFF16213e).withOpacity(0.8),
-          const Color(0xFF0f3460).withOpacity(0.5),
-          'Trống',
+            );
+          },
         ),
-        _buildLegendItem(
-          const Color(0xFF8B1E9B),
-          const Color(0xFFB24FBF),
-          'Đã chọn',
-        ),
-        _buildLegendItem(
-          const Color(0xFF2d2d44),
-          const Color(0xFF2d2d44),
-          'Đã đặt',
-        ),
-        _buildLegendItem(
-          const Color(0xFFFFB800).withOpacity(0.3),
-          const Color(0xFFFFB800).withOpacity(0.5),
-          'VIP',
-          icon: Icons.star,
-        ),
-      ],
-    ),
-  );
-
-  Widget _buildLegendItem(
-    Color color,
-    Color borderColor,
-    String label, {
-    IconData? icon,
-  }) => Row(
-    children: [
-      Container(
-        width: 24,
-        height: 24,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: borderColor),
-        ),
-        child: icon != null
-            ? Icon(icon, size: 12, color: const Color(0xFFFFB800))
-            : null,
       ),
-      const SizedBox(width: 6),
-      Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+    );
+  }
+
+  Widget _buildLegend() => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    children: const [
+      _Legend('Trống', Color(0xFF16213E)),
+      _Legend('Đã chọn', Color(0xFF8B1E9B)),
+      _Legend('VIP', Colors.yellow),
+      _Legend('Đã đặt', Color(0xFF2D2D44)),
     ],
   );
 
-  Widget _buildBottomBar(
-    double total,
-    String showDate,
-    String showTime,
-  ) => Container(
+  Widget _buildBottom(double total) => Container(
     padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      color: const Color(0xFF16213e),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.3),
-          blurRadius: 20,
-          offset: const Offset(0, -5),
-        ),
-      ],
-    ),
+    color: const Color(0xFF16213E),
     child: SafeArea(
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (selectedSeats.isNotEmpty)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Ghế: ${selectedSeats.join(', ')}',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${selectedSeats.length} ghế',
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    const Text(
-                      'Tổng tiền',
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                    Text(
-                      '${total.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\\d{1,3})(?=(\\d{3})+(?!\\d))'), (m) => '${m[1]},')} đ',
-                      style: const TextStyle(
-                        color: Color(0xFFFFB800),
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+          if (selectedSeats.isNotEmpty) ...[
+            Text(
+              'Ghế: ${selectedSeats.join(", ")}',
+              style: const TextStyle(color: Colors.white70),
             ),
-          const SizedBox(height: 16),
+            Text(
+              'Tổng: ${NumberFormat('#,##0').format(total)} đ',
+              style: const TextStyle(
+                color: Color(0xFFFFB800),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           ElevatedButton(
             onPressed: selectedSeats.isEmpty
                 ? null
-                : () async {
-                    final now = DateTime.now().toLocal();
-                    final payment = TicketPayment(
-                      orderInfo:
-                          'Thanh toán ${widget.movie.title} - ${widget.selectedCinema}',
-                      cinema: widget.selectedCinema,
-                      showDate: widget.selectedDate,
-                      showTime: widget.selectedTime,
-                      seatIds: selectedSeats.toList(),
-                      total: total,
-                    );
-
-                    final paymentUrl = _buildVnpPaymentUrl(
-                      orderInfo: payment.orderInfo,
-                      ipAddr: '192.168.10.10',
-                      amountTimes100: (total.round()) * 100,
-                      create: now,
-                      expire: now.add(const Duration(minutes: 15)),
-                    );
-
-                    await VNPAYFlutter.instance.show(
-                      context: context,
-                      paymentUrl: paymentUrl,
-                      onPaymentSuccess: (params) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Thanh toán thành công! Mã đơn: ${params['vnp_TxnRef']}',
-                            ),
-                            backgroundColor: const Color(0xFF8B1E9B),
-                          ),
-                        );
-                        Navigator.popUntil(context, (route) => route.isFirst);
-                      },
-                      onPaymentError: (params) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Thanh toán thất bại: ${params['vnp_ResponseCode']}',
-                            ),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      },
-                      onWebPaymentComplete: () =>
-                          debugPrint('Thanh toán trên web hoàn tất'),
-                    );
+                : () {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _showQrDialog(total);
+                    });
                   },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF8B1E9B),
-              disabledBackgroundColor: const Color(0xFF2d2d44),
-              minimumSize: const Size(double.infinity, 56),
+              disabledBackgroundColor: Colors.grey.shade700,
+              minimumSize: const Size(double.infinity, 50),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
               ),
             ),
             child: Text(
-              selectedSeats.isEmpty ? 'Vui lòng chọn ghế' : 'Thanh toán VNPay',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              selectedSeats.isEmpty
+                  ? 'Vui lòng chọn ghế'
+                  : 'Thanh toán QR Flutter',
+              style: const TextStyle(color: Colors.white, fontSize: 16),
             ),
           ),
         ],
       ),
     ),
+  );
+}
+
+class _Legend extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _Legend(this.label, this.color, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Container(
+        width: 20,
+        height: 20,
+        margin: const EdgeInsets.only(right: 6),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.white24),
+        ),
+      ),
+      Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+    ],
   );
 }
