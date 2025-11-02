@@ -5,6 +5,13 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import '../models/movie.dart';
 import 'booking_screen.dart';
 
+/// ------------------------------------------------------------
+/// Màn chi tiết phim + trailer + gallery + nút “Mua vé”
+/// - Nhận Movie; có thể override trailerUrl / galleryImages qua props
+/// - Tự nhận nhiều dạng link YouTube (youtube.com / youtu.be)
+/// - Tạm dừng trailer khi chuyển trang
+/// - UI dark, gọn, có placeholder/error an toàn
+/// ------------------------------------------------------------
 class MovieDetailScreen extends StatefulWidget {
   const MovieDetailScreen({
     super.key,
@@ -14,98 +21,84 @@ class MovieDetailScreen extends StatefulWidget {
   });
 
   final Movie movie;
-
-  /// Tuỳ chọn: nếu muốn override trailer trong movie
-  final String? trailerUrl;
-
-  /// Tuỳ chọn: nếu muốn override gallery trong movie
-  final List<String>? galleryImages;
+  final String? trailerUrl; // override trailer nếu muốn
+  final List<String>? galleryImages; // override gallery nếu muốn
 
   @override
   State<MovieDetailScreen> createState() => _MovieDetailScreenState();
 }
 
 class _MovieDetailScreenState extends State<MovieDetailScreen> {
-  // Ví dụ “thời điểm hiện tại” cố định để demo
-  final DateTime _now = DateTime(2025, 10, 18, 2, 27, 0);
+  YoutubePlayerController? _yt;
 
-  YoutubePlayerController? _ytController;
+  // ---------------- Helpers: YouTube & format ----------------
 
-  // ---------- Lifecycle ----------
+  /// Lấy ID video từ nhiều dạng link YouTube
+  String? _extractYoutubeId(String? url) {
+    if (url == null || url.trim().isEmpty) return null;
+    // youtube_player_flutter đã có helper — tận dụng:
+    return YoutubePlayer.convertUrlToId(url);
+  }
+
+  /// Dừng video an toàn
+  void _pauseTrailer() {
+    try {
+      _yt?.pause();
+    } catch (_) {}
+  }
+
+  // ---------------- Lifecycle ----------------
   @override
   void initState() {
     super.initState();
+    final url = widget.trailerUrl?.trim().isNotEmpty == true
+        ? widget.trailerUrl!.trim()
+        : (widget.movie.trailerUrl ?? '').trim();
 
-    // Lấy URL trailer: ưu tiên tham số truyền vào, fallback về movie.trailerUrl
-    final url = widget.trailerUrl ?? widget.movie.trailerUrl;
-    if (url != null && url.contains('youtube.com')) {
-      final id = YoutubePlayer.convertUrlToId(url);
-      if (id != null) {
-        _ytController = YoutubePlayerController(
-          initialVideoId: id,
-          flags: const YoutubePlayerFlags(autoPlay: false, mute: false),
-        );
-      }
+    final id = _extractYoutubeId(url);
+    if (id != null) {
+      _yt = YoutubePlayerController(
+        initialVideoId: id,
+        flags: const YoutubePlayerFlags(
+          autoPlay: false,
+          mute: false,
+          forceHD: false,
+          // nếu muốn video không phát nền khi thu nhỏ:
+          disableDragSeek: false,
+        ),
+      );
     }
   }
 
   @override
   void dispose() {
-    try {
-      _ytController?.pause();
-      _ytController?.dispose();
-    } catch (_) {}
+    _pauseTrailer();
+    _yt?.dispose();
     super.dispose();
   }
 
-  // ---------- Helpers ----------
-  void _viewImageFullscreen(BuildContext context, String imageUrl) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
-          body: Center(
-            child: InteractiveViewer(
-              child: CachedNetworkImage(
-                imageUrl: imageUrl,
-                fit: BoxFit.contain,
-                placeholder: (context, url) => const Center(
-                  child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
-                ),
-                errorWidget: (context, url, error) =>
-                    const Icon(Icons.error, color: Colors.white),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
+  // ---------------- Navigation ----------------
   void _goToBooking() {
-    // RẤT QUAN TRỌNG: tạm dừng trailer trước khi rời màn
-    try {
-      _ytController?.pause();
-    } catch (_) {}
-
+    _pauseTrailer();
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => BookingScreen(movie: widget.movie),
-      ),
+      MaterialPageRoute(builder: (_) => BookingScreen(movie: widget.movie)),
     );
   }
 
-  // ---------- UI ----------
+  // ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
     final movie = widget.movie;
-    final isNowShowing = movie.releaseDate.isBefore(_now);
 
-    // Nếu muốn dùng gallery override, lấy từ widget.galleryImages, không thì movie.galleryImages
-    final gallery = widget.galleryImages ?? movie.galleryImages;
+    // Đang chiếu? (so với thời điểm thật)
+    final bool isNowShowing = movie.releaseDate.isBefore(DateTime.now());
+
+    // Gallery: ưu tiên override, fallback movie.galleryImages
+    final List<String> gallery =
+        (widget.galleryImages != null && widget.galleryImages!.isNotEmpty)
+        ? widget.galleryImages!
+        : movie.galleryImages;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B0B0F),
@@ -118,32 +111,35 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
             color: Color(0xFFEDEDED),
             fontWeight: FontWeight.bold,
             fontSize: 20,
-            letterSpacing: 0.2,
           ),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Color(0xFFEDEDED)),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            _pauseTrailer();
+            Navigator.pop(context);
+          },
         ),
       ),
       body: Stack(
         children: [
           SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 120),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Poster chính
+                // -------- Poster lớn --------
                 GestureDetector(
-                  onTap: () => _viewImageFullscreen(context, movie.posterUrl),
+                  onTap: () => _viewImageFullscreen(movie.posterUrl),
                   child: Container(
-                    margin: const EdgeInsets.all(16.0),
+                    margin: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.55),
-                          blurRadius: 18,
-                          offset: const Offset(0, 12),
+                          color: Colors.black.withOpacity(0.45),
+                          blurRadius: 16,
+                          offset: const Offset(0, 10),
                         ),
                       ],
                     ),
@@ -156,20 +152,24 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                             width: double.infinity,
                             height: 300,
                             fit: BoxFit.cover,
-                            placeholder: (context, url) => const Center(
-                              child: CircularProgressIndicator(
-                                color: Color(0xFF8B1E9B),
+                            placeholder: (_, __) => const SizedBox(
+                              height: 300,
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFF8B1E9B),
+                                ),
                               ),
                             ),
-                            errorWidget: (context, url, error) => Container(
-                              color: const Color(0xFF151521),
+                            errorWidget: (_, __, ___) => Container(
                               height: 300,
+                              color: const Color(0xFF151521),
                               child: const Icon(
                                 Icons.broken_image_outlined,
                                 color: Color(0xFFB9B9C3),
                               ),
                             ),
                           ),
+                          // viền gradient tối phần dưới cho chữ dễ đọc
                           Container(
                             height: 300,
                             decoration: const BoxDecoration(
@@ -186,340 +186,131 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                   ),
                 ),
 
+                // -------- Thông tin cơ bản --------
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Tiêu đề
                       Text(
                         movie.title,
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFFEDEDED),
-                          letterSpacing: 0.2,
                         ),
                       ),
                       const SizedBox(height: 8),
-
-                      // Info cơ bản
-                      Row(
+                      Wrap(
+                        spacing: 16,
+                        runSpacing: 6,
                         children: [
-                          Text(
-                            'Thời lượng: ${movie.duration} phút',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFFB9B9C3),
-                            ),
+                          _infoChip('Thời lượng: ${movie.duration} phút'),
+                          _infoChip(
+                            'Khởi chiếu: '
+                            '${movie.releaseDate.day}/${movie.releaseDate.month}/${movie.releaseDate.year}',
                           ),
-                          const SizedBox(width: 16),
-                          Text(
-                            'Khởi chiếu: ${movie.releaseDate.day}/${movie.releaseDate.month}/${movie.releaseDate.year}',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFFB9B9C3),
-                            ),
-                          ),
+                          _infoChip('Thể loại: ${movie.genre}'),
                         ],
                       ),
-                      const SizedBox(height: 8),
-
-                      Text(
-                        'Thể loại: ${movie.genre}',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFFB9B9C3),
-                        ),
-                      ),
-
                       const SizedBox(height: 20),
 
-                      // Trailer
-                      if ((widget.trailerUrl ?? movie.trailerUrl)?.isNotEmpty ??
-                          false)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Trailer:',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFFEDEDED),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            if (_ytController != null)
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: YoutubePlayer(
-                                  controller: _ytController!,
-                                  showVideoProgressIndicator: true,
-                                  progressIndicatorColor: Colors.redAccent,
-                                ),
-                              )
-                            else
-                              GestureDetector(
-                                onTap: () =>
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Không thể phát trailer'),
-                                      ),
-                                    ),
-                                child: Container(
-                                  height: 200,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF151521),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: const Color(0xFF222230),
-                                    ),
-                                  ),
-                                  child: const Center(
-                                    child: Icon(
-                                      Icons.play_arrow,
-                                      color: Color(0xFFEDEDED),
-                                      size: 60,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            const SizedBox(height: 20),
-                          ],
+                      // -------- Trailer --------
+                      if (_yt != null) ...[
+                        const Text(
+                          'Trailer',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFEDEDED),
+                          ),
                         ),
-
-                      // Gallery ảnh
-                      if (gallery != null && gallery.isNotEmpty)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Hình ảnh:',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFFEDEDED),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              height: 120,
-                              child: ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: gallery.length,
-                                itemBuilder: (context, index) {
-                                  final img = gallery[index];
-                                  return GestureDetector(
-                                    onTap: () =>
-                                        _viewImageFullscreen(context, img),
-                                    child: Container(
-                                      width: 160,
-                                      margin: const EdgeInsets.only(right: 12),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(8),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(
-                                              0.35,
-                                            ),
-                                            blurRadius: 10,
-                                            offset: const Offset(0, 6),
-                                          ),
-                                        ],
-                                      ),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: CachedNetworkImage(
-                                          imageUrl: img,
-                                          fit: BoxFit.cover,
-                                          placeholder: (context, url) =>
-                                              const Center(
-                                                child:
-                                                    CircularProgressIndicator(
-                                                      color: Color(0xFF8B1E9B),
-                                                    ),
-                                              ),
-                                          errorWidget: (context, url, error) =>
-                                              Container(
-                                                color: const Color(0xFF151521),
-                                                child: const Icon(
-                                                  Icons.broken_image_outlined,
-                                                  color: Color(0xFFB9B9C3),
-                                                ),
-                                              ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                          ],
-                        ),
-
-                      // Đạo diễn
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Đạo diễn:',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFEDEDED),
+                        const SizedBox(height: 12),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: AspectRatio(
+                            aspectRatio: 16 / 9,
+                            child: YoutubePlayer(
+                              controller: _yt!,
+                              showVideoProgressIndicator: true,
+                              progressIndicatorColor: Colors.redAccent,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Column(
-                            children: [
-                              CachedNetworkImage(
-                                imageUrl: movie.directorImageUrl.isNotEmpty
-                                    ? movie.directorImageUrl
-                                    : 'https://via.placeholder.com/60?text=Director',
-                                imageBuilder: (context, provider) =>
-                                    CircleAvatar(
-                                      radius: 30,
-                                      backgroundImage: provider,
-                                    ),
-                                placeholder: (context, url) =>
-                                    const CircleAvatar(
-                                      radius: 30,
-                                      backgroundColor: Color(0xFF222230),
-                                      child: Center(
-                                        child: CircularProgressIndicator(
-                                          color: Color(0xFF8B1E9B),
-                                        ),
-                                      ),
-                                    ),
-                                errorWidget: (context, url, error) =>
-                                    const CircleAvatar(
-                                      radius: 30,
-                                      backgroundColor: Color(0xFF151521),
-                                      child: Icon(
-                                        Icons.broken_image_outlined,
-                                        color: Color(0xFFB9B9C3),
-                                      ),
-                                    ),
-                              ),
-                              const SizedBox(height: 8),
-                              SizedBox(
-                                width: 80,
-                                child: Text(
-                                  movie.director,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Color(0xFFEDEDED),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
+                      // -------- Gallery ảnh --------
+                      if (gallery.isNotEmpty) ...[
+                        const Text(
+                          'Hình ảnh',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFEDEDED),
                           ),
-                        ],
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 120,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: gallery.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 12),
+                            itemBuilder: (_, i) => _galleryThumb(gallery[i]),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
+                      // -------- Đạo diễn --------
+                      const Text(
+                        'Đạo diễn',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFEDEDED),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _personAvatar(
+                        name: movie.director,
+                        imageUrl: movie.directorImageUrl,
+                        placeholderText: 'Director',
                       ),
                       const SizedBox(height: 16),
 
-                      // Diễn viên
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Diễn viên:',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFEDEDED),
+                      // -------- Diễn viên --------
+                      if (movie.actors.isNotEmpty) ...[
+                        const Text(
+                          'Diễn viên',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFEDEDED),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: 110,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: movie.actors.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 12),
+                            itemBuilder: (_, i) => _actorItem(
+                              name: movie.actors[i],
+                              imageUrl: (i < movie.actorsImageUrls.length)
+                                  ? movie.actorsImageUrls[i]
+                                  : '',
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          if (movie.actors.isNotEmpty)
-                            SizedBox(
-                              height: 110,
-                              child: ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: movie.actors.length,
-                                itemBuilder: (context, index) {
-                                  final imageUrl =
-                                      index < movie.actorsImageUrls.length &&
-                                          movie
-                                              .actorsImageUrls[index]
-                                              .isNotEmpty
-                                      ? movie.actorsImageUrls[index]
-                                      : 'https://via.placeholder.com/60?text=Actor';
-                                  return Padding(
-                                    padding: const EdgeInsets.only(right: 12.0),
-                                    child: SizedBox(
-                                      width: 70,
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          CachedNetworkImage(
-                                            imageUrl: imageUrl,
-                                            imageBuilder: (context, provider) =>
-                                                CircleAvatar(
-                                                  radius: 30,
-                                                  backgroundImage: provider,
-                                                ),
-                                            placeholder: (context, url) =>
-                                                const CircleAvatar(
-                                                  radius: 30,
-                                                  backgroundColor: Color(
-                                                    0xFF222230,
-                                                  ),
-                                                  child: Center(
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                          color: Color(
-                                                            0xFF8B1E9B,
-                                                          ),
-                                                        ),
-                                                  ),
-                                                ),
-                                            errorWidget:
-                                                (
-                                                  context,
-                                                  url,
-                                                  error,
-                                                ) => const CircleAvatar(
-                                                  radius: 30,
-                                                  backgroundColor: Color(
-                                                    0xFF151521,
-                                                  ),
-                                                  child: Icon(
-                                                    Icons.broken_image_outlined,
-                                                    color: Color(0xFFB9B9C3),
-                                                  ),
-                                                ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            movie.actors[index],
-                                            textAlign: TextAlign.center,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              color: Color(0xFFEDEDED),
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
 
-                      // Mô tả
+                      // -------- Mô tả --------
                       Text(
                         movie.description,
                         style: const TextStyle(
@@ -530,32 +321,8 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Đánh giá
-                      if (isNowShowing)
-                        Row(
-                          children: [
-                            for (int i = 1; i <= 5; i++)
-                              Icon(
-                                i <= (movie.rating / 1).floor()
-                                    ? Icons.star
-                                    : i - 1 < movie.rating
-                                    ? Icons.star_half
-                                    : Icons.star_border,
-                                color: const Color(0xFFFFC107),
-                                size: 20,
-                              ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${movie.rating.toStringAsFixed(1)}/5 (${(1000 * movie.rating).toInt()} đánh giá)',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Color(0xFFB9B9C3),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                      const SizedBox(height: 120), // chừa chỗ cho nút dưới
+                      // -------- Đánh giá sao (nếu đã chiếu) --------
+                      if (isNowShowing) _ratingRow(movie.rating),
                     ],
                   ),
                 ),
@@ -563,28 +330,20 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
             ),
           ),
 
-          // Nút mua vé
+          // -------- Nút Mua vé (chỉ khi đã khởi chiếu) --------
           if (isNowShowing)
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
               child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF151521),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.45),
-                      blurRadius: 16,
-                      offset: const Offset(0, -8),
-                    ),
-                  ],
-                  border: const Border(
-                    top: BorderSide(color: Color(0xFF222230)),
-                  ),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF151521),
+                  border: Border(top: BorderSide(color: Color(0xFF222230))),
                 ),
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(16),
                 child: SafeArea(
+                  top: false,
                   child: ElevatedButton(
                     onPressed: _goToBooking,
                     style: ElevatedButton.styleFrom(
@@ -599,7 +358,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.confirmation_number_outlined, size: 24),
+                        Icon(Icons.confirmation_number_outlined, size: 22),
                         SizedBox(width: 8),
                         Text(
                           'Mua vé',
@@ -615,6 +374,147 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  // ---------------- Widgets con nhỏ gọn ----------------
+
+  Widget _infoChip(String text) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: const Color(0xFF151521),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: const Color(0xFF222230)),
+    ),
+    child: Text(text, style: const TextStyle(color: Color(0xFFB9B9C3))),
+  );
+
+  Widget _galleryThumb(String url) => GestureDetector(
+    onTap: () => _viewImageFullscreen(url),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: AspectRatio(
+        aspectRatio: 4 / 3,
+        child: CachedNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.cover,
+          placeholder: (_, __) => const Center(
+            child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
+          ),
+          errorWidget: (_, __, ___) => Container(
+            color: const Color(0xFF151521),
+            child: const Icon(
+              Icons.broken_image_outlined,
+              color: Color(0xFFB9B9C3),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _personAvatar({
+    required String name,
+    required String imageUrl,
+    required String placeholderText,
+  }) {
+    final url = imageUrl.isNotEmpty
+        ? imageUrl
+        : 'https://via.placeholder.com/60?text=$placeholderText';
+    return Column(
+      children: [
+        CachedNetworkImage(
+          imageUrl: url,
+          imageBuilder: (_, provider) =>
+              CircleAvatar(radius: 30, backgroundImage: provider),
+          placeholder: (_, __) => const CircleAvatar(
+            radius: 30,
+            backgroundColor: Color(0xFF222230),
+            child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
+          ),
+          errorWidget: (_, __, ___) => const CircleAvatar(
+            radius: 30,
+            backgroundColor: Color(0xFF151521),
+            child: Icon(Icons.broken_image_outlined, color: Color(0xFFB9B9C3)),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: 100,
+          child: Text(
+            name,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFFEDEDED),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _actorItem({required String name, required String imageUrl}) =>
+      _personAvatar(
+        name: name,
+        imageUrl: imageUrl.isNotEmpty
+            ? imageUrl
+            : 'https://via.placeholder.com/60?text=Actor',
+        placeholderText: 'Actor',
+      );
+
+  Widget _ratingRow(double rating) {
+    // rating 0..5 (double). Vẽ sao đầy/ nửa/ rỗng.
+    int full = rating.floor();
+    bool hasHalf = (rating - full) >= 0.25 && (rating - full) < 0.75;
+    int empty = 5 - full - (hasHalf ? 1 : 0);
+
+    return Row(
+      children: [
+        for (int i = 0; i < full; i++)
+          const Icon(Icons.star, color: Color(0xFFFFC107), size: 20),
+        if (hasHalf)
+          const Icon(Icons.star_half, color: Color(0xFFFFC107), size: 20),
+        for (int i = 0; i < empty; i++)
+          const Icon(Icons.star_border, color: Color(0xFFFFC107), size: 20),
+        const SizedBox(width: 8),
+        Text(
+          '${rating.toStringAsFixed(1)}/5',
+          style: const TextStyle(color: Color(0xFFB9B9C3)),
+        ),
+      ],
+    );
+  }
+
+  void _viewImageFullscreen(String imageUrl) {
+    _pauseTrailer(); // tránh phát nền khi xem ảnh
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              child: CachedNetworkImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.contain,
+                placeholder: (_, __) =>
+                    const CircularProgressIndicator(color: Color(0xFF8B1E9B)),
+                errorWidget: (_, __, ___) =>
+                    const Icon(Icons.error, color: Colors.white),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

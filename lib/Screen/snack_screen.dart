@@ -21,6 +21,39 @@ class _SnackScreenState extends State<SnackScreen> {
   final List<Snack> cartItems = [];
   int cartCount = 0;
 
+  // ================== Helpers: Giá & Ảnh ==================
+
+  /// Chuẩn hoá giá về **VND** (đồng):
+  /// - Nếu số < 1000 (65 / "65") coi là **ngàn** → 65 * 1000 = 65.000đ
+  /// - Nếu số >= 1000 coi là đồng → giữ nguyên.
+  int _toVND(dynamic raw) {
+    if (raw == null) return 0;
+    if (raw is num) {
+      final v = raw.toDouble();
+      return v < 1000 ? (v * 1000).round() : v.round();
+    }
+    if (raw is String) {
+      final cleaned = raw.replaceAll(RegExp(r'[^0-9.]'), '');
+      if (cleaned.isEmpty) return 0;
+      final v = double.tryParse(cleaned) ?? 0;
+      return v < 1000 ? (v * 1000).round() : v.round();
+    }
+    return 0;
+  }
+
+  /// Lấy URL ảnh từ nhiều key phổ biến trong Firebase
+  String _getImageUrl(Map<String, dynamic> m) {
+    final keys = ['imageUrl', 'imageURL', 'image', 'img'];
+    for (final k in keys) {
+      final v = m[k];
+      if (v is String && v.trim().isNotEmpty) return v.trim();
+    }
+    return '';
+  }
+
+  String _fmtCurrency(num vnd) => '${NumberFormat("#,##0").format(vnd)} đ';
+
+  // ================== Cart ==================
   void addToCart(Snack snack) {
     setState(() {
       cartItems.add(snack);
@@ -31,10 +64,8 @@ class _SnackScreenState extends State<SnackScreen> {
     ).showSnackBar(SnackBar(content: Text('Đã thêm ${snack.name} vào giỏ')));
   }
 
-  double get totalPrice =>
-      cartItems.fold(0, (sum, item) => sum + item.price * 1000);
+  double get totalPrice => cartItems.fold(0, (sum, item) => sum + (item.price));
 
-  // ⚡ Hiển thị giỏ hàng
   void _openCartDialog() {
     if (cartItems.isEmpty) {
       ScaffoldMessenger.of(
@@ -64,7 +95,7 @@ class _SnackScreenState extends State<SnackScreen> {
                     style: const TextStyle(color: Colors.white),
                   ),
                   subtitle: Text(
-                    '${snack.price}k VNĐ',
+                    _fmtCurrency(snack.price),
                     style: const TextStyle(color: Colors.white70),
                   ),
                 ),
@@ -78,7 +109,7 @@ class _SnackScreenState extends State<SnackScreen> {
                     style: TextStyle(color: Colors.white, fontSize: 14),
                   ),
                   Text(
-                    '${NumberFormat("#,##0").format(totalPrice)} đ',
+                    _fmtCurrency(totalPrice),
                     style: const TextStyle(
                       color: Colors.yellowAccent,
                       fontWeight: FontWeight.bold,
@@ -109,13 +140,13 @@ class _SnackScreenState extends State<SnackScreen> {
     );
   }
 
-  // ⚡ Dùng BottomSheet để tránh đơ UI
   void _showQrSheet() {
     final orderId = DateTime.now().millisecondsSinceEpoch.toString();
     final snackNames = cartItems.map((e) => e.name).join(', ');
-    final total = NumberFormat("#,##0").format(totalPrice);
+    final total = _fmtCurrency(totalPrice);
+
     final qrData =
-        'Thanh toán bắp nước\nMã đơn: $orderId\nMón: $snackNames\nTổng tiền: $total đ';
+        'Thanh toán bắp nước\nMã đơn: $orderId\nMón: $snackNames\nTổng tiền: $total';
 
     showModalBottomSheet(
       context: context,
@@ -149,7 +180,7 @@ class _SnackScreenState extends State<SnackScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Tổng: $total đ',
+              total,
               style: const TextStyle(
                 color: Colors.yellowAccent,
                 fontSize: 16,
@@ -193,6 +224,7 @@ class _SnackScreenState extends State<SnackScreen> {
     });
   }
 
+  // ================== UI ==================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -305,15 +337,13 @@ class _SnackScreenState extends State<SnackScreen> {
                       return DropdownMenuItem<String>(
                         value: entry.key,
                         child: Text(
-                          data['name'] ?? 'Không có tên',
+                          (data['name'] ?? 'Không có tên').toString(),
                           style: const TextStyle(color: Color(0xFFEDEDED)),
                         ),
                       );
                     }).toList(),
                     onChanged: (newValue) {
-                      setState(() {
-                        selectedCinemaId = newValue ?? '';
-                      });
+                      setState(() => selectedCinemaId = newValue ?? '');
                     },
                     isExpanded: true,
                     underline: const SizedBox(),
@@ -368,12 +398,17 @@ class _SnackScreenState extends State<SnackScreen> {
 
                       final snacks = snacksMap.entries.map((entry) {
                         final s = Map<String, dynamic>.from(entry.value);
+                        // ✅ Giá lưu VND (đồng) sau chuẩn hoá
+                        final priceVND = _toVND(s['price']).toDouble();
+                        // ✅ Ảnh lấy an toàn theo nhiều key
+                        final image = _getImageUrl(s);
+
                         return Snack(
-                          id: s['id']?.toString() ?? '',
-                          name: s['name']?.toString() ?? '',
-                          price: (s['price'] ?? 0.0).toDouble(),
-                          imageUrl: s['imageUrl']?.toString() ?? '',
-                          description: s['description']?.toString() ?? '',
+                          id: (s['id'] ?? entry.key).toString(),
+                          name: (s['name'] ?? '').toString(),
+                          price: priceVND, // <-- đã là VND
+                          imageUrl: image,
+                          description: (s['description'] ?? '').toString(),
                         );
                       }).toList();
 
@@ -407,13 +442,18 @@ class _SnackScreenState extends State<SnackScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Ảnh snack
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
             child: CachedNetworkImage(
-              imageUrl: snack.imageUrl,
+              imageUrl: snack.imageUrl ?? '',
               height: 120,
               width: double.infinity,
               fit: BoxFit.cover,
+              memCacheWidth: 600,
+              filterQuality: FilterQuality.low,
+              fadeInDuration: Duration.zero,
+              fadeOutDuration: Duration.zero,
               placeholder: (context, url) => Container(
                 height: 120,
                 color: const Color(0xFF222230),
@@ -426,6 +466,7 @@ class _SnackScreenState extends State<SnackScreen> {
               ),
             ),
           ),
+          // Nội dung
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Column(
@@ -433,6 +474,8 @@ class _SnackScreenState extends State<SnackScreen> {
               children: [
                 Text(
                   snack.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -441,7 +484,7 @@ class _SnackScreenState extends State<SnackScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${snack.price}k VNĐ',
+                  _fmtCurrency(snack.price), // <-- VND đã format
                   style: const TextStyle(color: Color(0xFF8B1E9B)),
                 ),
                 const SizedBox(height: 6),

@@ -14,9 +14,9 @@ import 'Screen/snack_screen.dart';
 import 'Screen/movie_detail_screen.dart';
 import 'Screen/booking_screen.dart';
 import 'Screen/seat_selection_screen.dart';
-import 'Screen/movie_selection_screen.dart';
-import 'Screen/showtimes_screen.dart';
-import 'Screen/ticket_manager_screen.dart'; // 🆕 Thêm màn hình quản lý vé
+import 'Screen/cinema_about_screen.dart';
+//import 'Screen/showtimes_screen.dart';
+import 'Screen/ticket_manager_screen.dart';
 
 // Models
 import 'models/movie.dart';
@@ -73,41 +73,6 @@ class MyApp extends StatelessWidget {
               return _err('Lỗi: /details cần Movie.');
             }
 
-          case '/movie-selection':
-            {
-              final args = settings.arguments;
-              Cinema? cinema;
-              if (args is Cinema) cinema = args;
-              if (args is Map && args['cinema'] is Cinema) {
-                cinema = args['cinema'] as Cinema;
-              }
-              if (cinema != null) {
-                return _mat(MovieSelectionScreen(cinema: cinema));
-              }
-              return _err('Lỗi: /movie-selection cần Cinema.');
-            }
-
-          case '/showtimes':
-            {
-              final args = settings.arguments;
-              if (args is Map &&
-                  args['selectedCinema'] is Cinema &&
-                  args['selectedMovie'] is Movie &&
-                  args['selectedDate'] is DateTime) {
-                return _mat(
-                  ShowtimesScreen(
-                    selectedCinema: args['selectedCinema'] as Cinema,
-                    selectedMovie: args['selectedMovie'] as Movie,
-                    selectedDate: args['selectedDate'] as DateTime,
-                    selectedTime: args['selectedTime'] as TimeOfDay?,
-                  ),
-                );
-              }
-              return _err(
-                'Lỗi: /showtimes cần {selectedCinema, selectedMovie, selectedDate, selectedTime?}.',
-              );
-            }
-
           case '/booking':
             {
               final args = settings.arguments;
@@ -142,6 +107,21 @@ class MyApp extends StatelessWidget {
               return _err(
                 'Lỗi: /seat-selection cần {movie, selectedDate, selectedCinema(String), selectedTime}.',
               );
+            }
+
+          // ✅ MỚI THÊM: route tới trang giới thiệu rạp
+          case '/cinema-about':
+            {
+              final args = settings.arguments;
+              Cinema? cinema;
+              if (args is Cinema) cinema = args;
+              if (args is Map && args['cinema'] is Cinema) {
+                cinema = args['cinema'] as Cinema;
+              }
+              if (cinema != null) {
+                return _mat(CinemaAboutScreen(cinema: cinema));
+              }
+              return _err('Lỗi: /cinema-about cần Cinema.');
             }
 
           default:

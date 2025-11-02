@@ -9,6 +9,12 @@ import '../models/movie.dart';
 import '../models/cinema_model.dart';
 import 'seat_selection_screen.dart';
 
+/// ===============================================================
+/// BOOKING SCREEN
+/// - Chọn NGÀY → RẠP → KHUNG GIỜ (khung giờ tùy theo openHours của từng rạp)
+/// - Dùng Realtime Database để lấy danh sách rạp
+/// - Có lọc rạp theo movie.cinemas nếu dữ liệu phim cung cấp
+/// ===============================================================
 class BookingScreen extends StatefulWidget {
   final Movie movie;
   const BookingScreen({super.key, required this.movie});
@@ -18,115 +24,149 @@ class BookingScreen extends StatefulWidget {
 }
 
 class _BookingScreenState extends State<BookingScreen> {
-  final DatabaseReference _database = FirebaseDatabase.instance.ref();
+  // ------------------ Firebase ------------------
+  final DatabaseReference _db = FirebaseDatabase.instance.ref();
 
-  DateTime now = DateTime.now();
-  Timer? _nowTimer;
+  // ------------------ “Thời gian hiện tại” (để ẩn giờ đã qua) ------------------
+  DateTime _now = DateTime.now();
+  Timer? _nowTick;
+  static const Duration _nowTickInterval = Duration(minutes: 1);
 
-  int selectedDayIndex = 0;
-  int selectedCinemaIndex = 0;
-  int selectedTimeIndex = 0;
+  // ------------------ Lựa chọn của người dùng ------------------
+  int _dayIndex = 0; // index của ngày
+  int _cinemaIndex = 0; // index của rạp
+  int _timeIndex = 0; // index của khung giờ
 
-  List<DateTime> availableDates = [];
-  List<Cinema> cinemas = [];
-  bool isLoading = true;
+  // ------------------ Dữ liệu hiển thị ------------------
+  List<DateTime> _dates = []; // 6 ngày: hôm nay -> +5 ngày
+  List<Cinema> _cinemas = [];
+  bool _loading = true;
 
-  static const List<List<int>> _fallbackSlots = [
+  // Fallback slot khi không parse được openHours: [startHour, startMinute, endHour, endMinute]
+  static const List<List<int>> _fallbackSlots = <List<int>>[
     [9, 0, 11, 0],
     [13, 0, 15, 0],
     [17, 0, 19, 0],
     [20, 0, 22, 0],
   ];
 
+  // =============================================================
+  // LIFECYCLE
+  // =============================================================
   @override
   void initState() {
     super.initState();
-    _rebuildAvailableDates();
+    _buildDates();
     _fetchCinemas();
-    _nowTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      setState(() => now = DateTime.now());
+    // Cập nhật _now mỗi phút để ẩn slot đã qua khi là “Hôm nay”
+    _nowTick = Timer.periodic(_nowTickInterval, (_) {
+      if (!mounted) return;
+      setState(() => _now = DateTime.now());
     });
   }
 
-  /// ✅ Lấy dữ liệu từ Firebase (tự nhận Map/List)
+  @override
+  void dispose() {
+    _nowTick?.cancel();
+    super.dispose();
+  }
+
+  // =============================================================
+  // DATA: Lấy rạp
+  // =============================================================
   Future<void> _fetchCinemas() async {
     try {
-      final snapshot = await _database.child('cinemas').get();
-      if (!snapshot.exists) {
-        setState(() => isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Không tìm thấy dữ liệu rạp trên Firebase'),
-          ),
-        );
-        return;
-      }
-
-      final raw = snapshot.value;
+      final snap = await _db.child('cinemas').get();
       final List<Cinema> loaded = [];
 
-      if (raw is Map) {
-        // ✅ Dữ liệu kiểu Map {"1": {...}, "2": {...}}
-        raw.forEach((_, value) {
-          if (value is Map) {
-            loaded.add(Cinema.fromMap(Map<String, dynamic>.from(value)));
-          }
-        });
-      } else if (raw is List) {
-        // ✅ Dữ liệu kiểu List [{...}, {...}]
-        for (final item in raw) {
-          if (item == null) continue;
-          if (item is Map) {
-            loaded.add(Cinema.fromMap(Map<String, dynamic>.from(item)));
+      if (snap.exists) {
+        final raw = snap.value;
+        if (raw is Map) {
+          raw.forEach((_, v) {
+            if (v is Map) {
+              loaded.add(Cinema.fromMap(Map<String, dynamic>.from(v)));
+            }
+          });
+        } else if (raw is List) {
+          for (final v in raw) {
+            if (v is Map)
+              loaded.add(Cinema.fromMap(Map<String, dynamic>.from(v)));
           }
         }
-      } else {
-        throw Exception('Dữ liệu không đúng định dạng.');
       }
 
+      // Nếu movie.cinemas có, chỉ giữ lại rạp có trong map này
+      final filtered = _filterCinemasByMovie(loaded, widget.movie);
+
+      if (!mounted) return;
       setState(() {
-        cinemas = loaded;
-        isLoading = false;
+        _cinemas = filtered;
+        _loading = false;
+        _fixIndexes(); // đảm bảo các index hợp lệ khi dữ liệu đã có
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => isLoading = false);
+      setState(() => _loading = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Lỗi tải dữ liệu: $e')));
+      ).showSnackBar(SnackBar(content: Text('Lỗi tải dữ liệu rạp: $e')));
     }
   }
 
-  /// ✅ Xử lý openHours cả 2 dạng: "09:00-11:00, 14:00-16:00" hoặc "09:00 - 23:00"
+  List<Cinema> _filterCinemasByMovie(List<Cinema> all, Movie m) {
+    final link = m.cinemas;
+    if (link == null || link.isEmpty)
+      return all; // không có ràng buộc → giữ nguyên
+    final allowed = link.keys.toSet();
+    return all.where((c) => allowed.contains(c.id)).toList();
+  }
+
+  // =============================================================
+  // DATES & TIME SLOTS
+  // =============================================================
+  /// Tạo 6 ngày: hôm nay → 5 ngày sau
+  void _buildDates() {
+    final base = DateTime(_now.year, _now.month, _now.day);
+    _dates = List.generate(6, (i) => base.add(Duration(days: i)));
+  }
+
+  /// Parse openHours thành slot [hh, mm, hh, mm]
+  /// Hỗ trợ:
+  ///  - "09:00-11:00, 14:00-16:00"
+  ///  - "09:00 - 23:00" → auto chia 4 khung
   List<List<int>> _parseSlots(String openHours) {
     try {
-      if (openHours.contains(',')) {
-        // Nhiều khung giờ, ví dụ "09:00-11:00, 14:00-16:00"
-        return openHours.split(',').map((part) {
+      final text = openHours.trim();
+      if (text.isEmpty) return _fallbackSlots;
+
+      // Nhiều khoảng “a-b, c-d”
+      if (text.contains(',')) {
+        return text.split(',').map((part) {
           final range = part.trim().split('-');
-          final start = range[0].trim().split(':').map(int.parse).toList();
-          final end = range[1].trim().split(':').map(int.parse).toList();
-          return [start[0], start[1], end[0], end[1]];
+          final s = range[0].trim().split(':').map(int.parse).toList();
+          final e = range[1].trim().split(':').map(int.parse).toList();
+          return [s[0], s[1], e[0], e[1]];
         }).toList();
       }
 
-      if (openHours.contains('-')) {
-        // Một khoảng dài, ví dụ "09:00 - 23:00" → chia nhỏ 4 suất
-        final range = openHours.split('-');
-        final start = range[0].replaceAll(RegExp(r'[^0-9:]'), '').split(':');
-        final end = range[1].replaceAll(RegExp(r'[^0-9:]'), '').split(':');
-        final startHour = int.tryParse(start[0]) ?? 9;
-        final endHour = int.tryParse(end[0]) ?? 23;
-        final diff = endHour - startHour;
-        final step = diff ~/ 4;
+      // Một khoảng duy nhất “a-b” → chia 4
+      if (text.contains('-')) {
+        final range = text.split('-');
+        final s = range[0].replaceAll(RegExp(r'[^0-9:]'), '').split(':');
+        final e = range[1].replaceAll(RegExp(r'[^0-9:]'), '').split(':');
+        final sh = int.tryParse(s[0]) ?? 9;
+        final eh = int.tryParse(e[0]) ?? 23;
 
-        final slots = <List<int>>[];
+        final diff = (eh - sh).clamp(1, 24);
+        final step = (diff ~/ 4).clamp(1, 24);
+
+        final out = <List<int>>[];
         for (int i = 0; i < 4; i++) {
-          final sh = startHour + i * step;
-          final eh = (i == 3) ? endHour : sh + step;
-          slots.add([sh, 0, eh, 0]);
+          final startH = sh + i * step;
+          final endH = (i == 3) ? eh : (startH + step);
+          out.add([startH, 0, endH, 0]);
         }
-        return slots;
+        return out;
       }
 
       return _fallbackSlots;
@@ -135,15 +175,42 @@ class _BookingScreenState extends State<BookingScreen> {
     }
   }
 
-  void _rebuildAvailableDates() {
-    final base = DateTime(now.year, now.month, now.day);
-    availableDates = List.generate(6, (i) => base.add(Duration(days: i)));
+  /// Ẩn slot đã qua nếu đang chọn “Hôm nay”
+  List<Map<String, TimeOfDay>> _buildTimeOfDaySlots(Cinema? cinema) {
+    final slots = (cinema == null)
+        ? _fallbackSlots
+        : _parseSlots(cinema.openHours);
+
+    final list = slots
+        .map(
+          (s) => {
+            'start': TimeOfDay(hour: s[0], minute: s[1]),
+            'end': TimeOfDay(hour: s[2], minute: s[3]),
+          },
+        )
+        .toList();
+
+    if (_isToday(_dates[_dayIndex])) {
+      final nowTod = TimeOfDay.fromDateTime(_now);
+      // Giữ slot có start sau “bây giờ”
+      return list.where((m) => _isAfter(m['start']!, nowTod)).toList();
+    }
+    return list;
   }
 
-  String _fmt(TimeOfDay t) =>
+  bool _isAfter(TimeOfDay a, TimeOfDay b) {
+    if (a.hour != b.hour) return a.hour > b.hour;
+    return a.minute > b.minute;
+    // Nếu muốn “>=” thì thay bằng >= ở trên.
+  }
+
+  bool _isToday(DateTime d) =>
+      d.year == _now.year && d.month == _now.month && d.day == _now.day;
+
+  String _fmtTod(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
-  String _formatDate(DateTime date) {
+  String _fmtDateShort(DateTime d) {
     const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     const months = [
       'Th1',
@@ -159,34 +226,19 @@ class _BookingScreenState extends State<BookingScreen> {
       'Th11',
       'Th12',
     ];
-    return '${days[date.weekday % 7]}, ${date.day} ${months[date.month - 1]}';
+    return '${days[d.weekday % 7]}, ${d.day} ${months[d.month - 1]}';
   }
 
-  @override
-  void dispose() {
-    _nowTimer?.cancel();
-    super.dispose();
-  }
-
+  // =============================================================
+  // UI
+  // =============================================================
   @override
   Widget build(BuildContext context) {
-    final selectedDate = availableDates[selectedDayIndex];
-    final selectedCinema = cinemas.isNotEmpty
-        ? cinemas[selectedCinemaIndex]
-        : null;
+    // Bảo vệ index khi dữ liệu đổi
+    _fixIndexes();
 
-    final rawSlots = selectedCinema == null
-        ? _fallbackSlots
-        : _parseSlots(selectedCinema.openHours);
-
-    final times = rawSlots
-        .map(
-          (s) => {
-            'start': TimeOfDay(hour: s[0], minute: s[1]),
-            'end': TimeOfDay(hour: s[2], minute: s[3]),
-          },
-        )
-        .toList();
+    final selectedCinema = _cinemas.isEmpty ? null : _cinemas[_cinemaIndex];
+    final times = _buildTimeOfDaySlots(selectedCinema);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B0B0F),
@@ -199,23 +251,23 @@ class _BookingScreenState extends State<BookingScreen> {
         ),
         title: Text(
           widget.movie.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
           ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
         ),
       ),
-      body: isLoading
+      body: _loading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
             )
-          : cinemas.isEmpty
+          : _cinemas.isEmpty
           ? const Center(
               child: Text(
                 'Không có rạp khả dụng!',
-                style: TextStyle(color: Colors.white70, fontSize: 16),
+                style: TextStyle(color: Colors.white70),
               ),
             )
           : SingleChildScrollView(
@@ -223,22 +275,25 @@ class _BookingScreenState extends State<BookingScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildMovieInfo(),
+                  _movieHeader(),
                   const SizedBox(height: 20),
-                  _buildDateSelector(),
+                  _dateSelector(),
                   const SizedBox(height: 20),
-                  _buildCinemaSelector(),
+                  _cinemaSelector(),
                   const SizedBox(height: 20),
-                  _buildTimeSelector(times),
+                  _timeSelector(times),
                   const SizedBox(height: 24),
-                  _buildSeatButton(selectedDate, selectedCinema, times),
+                  _seatButton(times, selectedCinema),
                 ],
               ),
             ),
     );
   }
 
-  Widget _buildMovieInfo() => Container(
+  // ------------ Widgets nhỏ (có chú thích) ------------
+
+  /// Thông tin nhanh của phim
+  Widget _movieHeader() => Container(
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
       color: const Color(0xFF151521),
@@ -272,7 +327,8 @@ class _BookingScreenState extends State<BookingScreen> {
     ),
   );
 
-  Widget _buildDateSelector() => Column(
+  /// Chọn ngày (6 ngày)
+  Widget _dateSelector() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       const Text(
@@ -288,18 +344,21 @@ class _BookingScreenState extends State<BookingScreen> {
         height: 80,
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
-          itemCount: availableDates.length,
+          itemCount: _dates.length,
           itemBuilder: (_, i) {
-            final date = availableDates[i];
-            final isToday = date.day == now.day && date.month == now.month;
-            final isSelected = selectedDayIndex == i;
+            final d = _dates[i];
+            final selected = i == _dayIndex;
+            final isToday = _isToday(d);
             return GestureDetector(
-              onTap: () => setState(() => selectedDayIndex = i),
+              onTap: () => setState(() {
+                _dayIndex = i;
+                _timeIndex = 0; // đổi ngày -> reset giờ
+              }),
               child: Container(
                 margin: const EdgeInsets.only(right: 12),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: isSelected
+                  color: selected
                       ? const Color(0xFF8B1E9B)
                       : const Color(0xFF151521),
                   borderRadius: BorderRadius.circular(12),
@@ -308,19 +367,19 @@ class _BookingScreenState extends State<BookingScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      _formatDate(date),
+                      _fmtDateShort(d),
                       style: TextStyle(
-                        color: isSelected ? Colors.white : Colors.white70,
-                        fontWeight: isSelected
+                        color: selected ? Colors.white : Colors.white70,
+                        fontWeight: selected
                             ? FontWeight.bold
                             : FontWeight.w500,
                       ),
                     ),
                     Text(
-                      isToday ? 'Hôm nay' : '${date.day}',
+                      isToday ? 'Hôm nay' : '${d.day}',
                       style: TextStyle(
                         fontSize: 16,
-                        color: isSelected ? Colors.white : Colors.white70,
+                        color: selected ? Colors.white : Colors.white70,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -334,7 +393,8 @@ class _BookingScreenState extends State<BookingScreen> {
     ],
   );
 
-  Widget _buildCinemaSelector() => Column(
+  /// Chọn rạp
+  Widget _cinemaSelector() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       const Text(
@@ -349,17 +409,20 @@ class _BookingScreenState extends State<BookingScreen> {
       ListView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: cinemas.length,
+        itemCount: _cinemas.length,
         itemBuilder: (_, i) {
-          final c = cinemas[i];
-          final isSelected = selectedCinemaIndex == i;
+          final c = _cinemas[i];
+          final selected = i == _cinemaIndex;
           return GestureDetector(
-            onTap: () => setState(() => selectedCinemaIndex = i),
+            onTap: () => setState(() {
+              _cinemaIndex = i;
+              _timeIndex = 0; // đổi rạp -> reset giờ
+            }),
             child: Container(
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isSelected
+                color: selected
                     ? const Color(0xFF8B1E9B)
                     : const Color(0xFF151521),
                 borderRadius: BorderRadius.circular(12),
@@ -384,8 +447,8 @@ class _BookingScreenState extends State<BookingScreen> {
                     child: Text(
                       c.name,
                       style: TextStyle(
-                        color: isSelected ? Colors.white : Colors.white70,
-                        fontWeight: isSelected
+                        color: selected ? Colors.white : Colors.white70,
+                        fontWeight: selected
                             ? FontWeight.bold
                             : FontWeight.w500,
                       ),
@@ -400,7 +463,8 @@ class _BookingScreenState extends State<BookingScreen> {
     ],
   );
 
-  Widget _buildTimeSelector(List<Map<String, TimeOfDay>> times) => Column(
+  /// Chọn khung giờ (theo rạp)
+  Widget _timeSelector(List<Map<String, TimeOfDay>> times) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       const Text(
@@ -412,73 +476,83 @@ class _BookingScreenState extends State<BookingScreen> {
         ),
       ),
       const SizedBox(height: 12),
-      SizedBox(
-        height: 60,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          itemCount: times.length,
-          itemBuilder: (_, i) {
-            final isSelected = selectedTimeIndex == i;
-            final s = times[i]['start']!, e = times[i]['end']!;
-            return GestureDetector(
-              onTap: () => setState(() => selectedTimeIndex = i),
-              child: Container(
-                margin: const EdgeInsets.only(right: 12),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? const Color(0xFF8B1E9B)
-                      : const Color(0xFF151521),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: Text(
-                    '${_fmt(s)} ~ ${_fmt(e)}',
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.white70,
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.w500,
+      if (times.isEmpty)
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF151521),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Text(
+            'Không có khung giờ phù hợp!',
+            style: TextStyle(color: Colors.white70),
+          ),
+        )
+      else
+        SizedBox(
+          height: 60,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: times.length,
+            itemBuilder: (_, i) {
+              final selected = i == _timeIndex;
+              final s = times[i]['start']!;
+              final e = times[i]['end']!;
+              return GestureDetector(
+                onTap: () => setState(() => _timeIndex = i),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? const Color(0xFF8B1E9B)
+                        : const Color(0xFF151521),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${_fmtTod(s)} ~ ${_fmtTod(e)}',
+                      style: TextStyle(
+                        color: selected ? Colors.white : Colors.white70,
+                        fontWeight: selected
+                            ? FontWeight.bold
+                            : FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
-      ),
     ],
   );
 
-  Widget _buildSeatButton(
-    DateTime selectedDate,
-    Cinema? selectedCinema,
-    List<Map<String, TimeOfDay>> times,
-  ) {
+  /// Nút chuyển sang chọn ghế
+  Widget _seatButton(List<Map<String, TimeOfDay>> times, Cinema? cinema) {
     final valid =
-        selectedCinema != null &&
-        times.isNotEmpty &&
-        selectedTimeIndex < times.length;
+        cinema != null && times.isNotEmpty && _timeIndex < times.length;
     return ElevatedButton(
-      onPressed: valid
-          ? () {
-              final start = times[selectedTimeIndex]['start']!;
+      onPressed: !valid
+          ? null
+          : () {
+              final start = times[_timeIndex]['start']!;
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => SeatSelectionScreen(
                     movie: widget.movie,
-                    selectedDate: selectedDate,
-                    selectedCinema: selectedCinema.name,
+                    selectedDate: _dates[_dayIndex],
+                    selectedCinema: cinema!.name,
                     selectedTime: start,
                   ),
                 ),
               );
-            }
-          : null,
+            },
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFF8B1E9B),
         minimumSize: const Size(double.infinity, 56),
@@ -496,5 +570,25 @@ class _BookingScreenState extends State<BookingScreen> {
         ],
       ),
     );
+  }
+
+  // =============================================================
+  // Bảo vệ Index (tránh crash khi dữ liệu đổi)
+  // =============================================================
+  void _fixIndexes() {
+    if (_dates.isEmpty) _buildDates();
+    _dayIndex = _clamp(_dayIndex, 0, (_dates.length - 1));
+
+    _cinemaIndex = _clamp(_cinemaIndex, 0, (_cinemas.length - 1));
+
+    // _timeIndex sẽ được “ghìm” ở thời điểm render dựa trên danh sách times thực tế.
+    if (_timeIndex < 0) _timeIndex = 0;
+  }
+
+  int _clamp(int v, int min, int max) {
+    if (max < min) return min;
+    if (v < min) return min;
+    if (v > max) return max;
+    return v;
   }
 }

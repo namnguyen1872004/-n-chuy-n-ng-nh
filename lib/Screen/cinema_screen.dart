@@ -1,12 +1,19 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import './movie_selection_screen.dart';
-import '../models/cinema_model.dart';
+import 'cinema_about_screen.dart'; // ✅ Màn “Giới thiệu rạp”
+import '../models/cinema_model.dart'; // ✅ Model Cinema
 
-/// Màn hình chọn rạp
+/// ===============================================================
+/// MÀN HÌNH CHỌN RẠP (CinemaScreen)
+/// - Header: back + title + ô tìm kiếm + dải brand filter
+/// - Body: danh sách rạp realtime từ Firebase (/cinemas)
+/// - Có thể lọc theo từ khoá & brand
+/// - Nhấn item → sang CinemaAboutScreen
+/// ===============================================================
 class CinemaScreen extends StatefulWidget {
   const CinemaScreen({super.key});
 
@@ -15,20 +22,20 @@ class CinemaScreen extends StatefulWidget {
 }
 
 class _CinemaScreenState extends State<CinemaScreen> {
-  /// Tham chiếu gốc vào Realtime Database
-  final DatabaseReference _database = FirebaseDatabase.instance.ref();
+  // Firebase
+  final DatabaseReference _db = FirebaseDatabase.instance.ref();
 
-  /// Danh sách rạp lấy từ Firebase
-  List<Cinema> cinemas = [];
+  // State hiển thị
+  String _search = '';
+  String? _brandKey; // null = không lọc
+  bool _hadDataOnce = false; // để phân biệt “đang tải lần đầu” hay “trống”
+  String _city = 'TP.HN'; // demo: city pill (chưa lọc server)
 
-  /// Trạng thái UI
-  String searchQuery = '';
-  bool isLoading = true;
-  String? selectedBrandKey; // null = không lọc
-  String city = 'TP.HN';
+  // Debounce cho ô tìm kiếm
+  Timer? _debounce;
+  static const _searchDelay = Duration(milliseconds: 250);
 
-  /// Danh sách brand (chỉ dùng để hiển thị filter trên UI)
-  /// 3 brand phổ biến: CGV, Lotte, BHD
+  // Danh sách brand hiển thị
   final List<Map<String, String>> _brands = const [
     {
       'key': 'cgv',
@@ -51,49 +58,36 @@ class _CinemaScreenState extends State<CinemaScreen> {
   ];
 
   @override
-  void initState() {
-    super.initState();
-    _fetchCinemas(); // tải dữ liệu rạp khi mở màn hình
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
   }
 
-  // ---------------------------------------------------------------------------
-  // 1) DATA: Lấy danh sách rạp từ Firebase (/cinemas)
-  // ---------------------------------------------------------------------------
-  Future<void> _fetchCinemas() async {
-    try {
-      final snapshot = await _database.child('cinemas').get();
-      if (!mounted) return;
-
-      if (!snapshot.exists) {
-        setState(() => isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Không tìm thấy dữ liệu rạp')),
-        );
-        return;
-      }
-
-      // snapshot.value có thể là Map<dynamic,dynamic>
-      final data = Map<String, dynamic>.from(snapshot.value as Map);
-      final List<Cinema> loaded = data.values
-          .map((v) => Cinema.fromMap(Map<String, dynamic>.from(v)))
-          .toList();
-
-      setState(() {
-        cinemas = loaded;
-        isLoading = false;
-      });
-    } catch (e) {
-      setState(() => isLoading = false);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Lỗi tải dữ liệu: $e')));
-    }
+  /// Suy ra brand từ tên rạp (để filter nhanh phía client)
+  String _detectBrand(String name) {
+    final n = name.toLowerCase();
+    if (n.contains('cgv')) return 'cgv';
+    if (n.contains('lotte')) return 'lotte';
+    if (n.contains('bhd')) return 'bhd';
+    return 'other';
   }
 
-  // ---------------------------------------------------------------------------
-  // 2) ACTION: Mở Google Maps “Tìm đường” đến địa chỉ rạp
-  // ---------------------------------------------------------------------------
+  /// Lọc danh sách rạp theo từ khoá + brand
+  List<Cinema> _filterCinemas(List<Cinema> src) {
+    final q = _search.trim().toLowerCase();
+    return src.where((c) {
+      final okSearch =
+          q.isEmpty ||
+          c.name.toLowerCase().contains(q) ||
+          c.address.toLowerCase().contains(q);
+      final okBrand = (_brandKey == null)
+          ? true
+          : _detectBrand(c.name) == _brandKey;
+      return okSearch && okBrand;
+    }).toList();
+  }
+
+  /// Mở Google Maps “Tìm đường” tới địa chỉ rạp
   Future<void> _openDirections(String address) async {
     if (address.trim().isEmpty) return;
     final uri = Uri.parse(
@@ -107,142 +101,241 @@ class _CinemaScreenState extends State<CinemaScreen> {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // 3) HELPER: Suy ra brand từ tên rạp (để dùng khi lọc theo brand)
-  // ---------------------------------------------------------------------------
-  String _detectBrand(String name) {
-    final n = name.toLowerCase();
-    if (n.contains('cgv')) return 'cgv';
-    if (n.contains('lotte')) return 'lotte';
-    if (n.contains('bhd')) return 'bhd';
-    return 'other';
+  /// Parse snapshot.value → List<Cinema> (hỗ trợ Map/List)
+  List<Cinema> _parseCinemas(dynamic raw) {
+    final out = <Cinema>[];
+    if (raw is Map) {
+      final mm = Map<String, dynamic>.from(raw);
+      for (final v in mm.values) {
+        if (v is Map) out.add(Cinema.fromMap(Map<String, dynamic>.from(v)));
+      }
+    } else if (raw is List) {
+      for (final v in raw) {
+        if (v is Map) out.add(Cinema.fromMap(Map<String, dynamic>.from(v)));
+      }
+    }
+    return out;
+    // Có thể sort theo tên nếu muốn: out..sort((a,b) => a.name.compareTo(b.name));
   }
 
-  // ---------------------------------------------------------------------------
-  // 4) UI
-  // ---------------------------------------------------------------------------
+  /// Debounce khi gõ tìm kiếm (tránh rebuild liên tục)
+  void _onSearchChanged(String v) {
+    _debounce?.cancel();
+    _debounce = Timer(_searchDelay, () {
+      if (!mounted) return;
+      setState(() => _search = v);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Lọc danh sách rạp theo từ khóa & brand
-    final filtered = cinemas.where((c) {
-      final q = searchQuery.toLowerCase();
-      final matchSearch =
-          c.name.toLowerCase().contains(q) ||
-          c.address.toLowerCase().contains(q);
-      final matchBrand = selectedBrandKey == null
-          ? true
-          : _detectBrand(c.name) == selectedBrandKey;
-      return matchSearch && matchBrand;
-    }).toList();
-
     return Scaffold(
       backgroundColor: const Color(0xFF0B0B0F),
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
-          child: Column(
-            children: [
-              _headerSection(context),
-              const SizedBox(height: 8),
-              // Tiêu đề + chip thành phố
-              Padding(
+          slivers: [
+            // ---------- Header: back + title + search + brand chips ----------
+            SliverToBoxAdapter(child: _header(context)),
+            const SliverToBoxAdapter(child: SizedBox(height: 8)),
+
+            // ---------- Tiêu đề + chip city ----------
+            SliverToBoxAdapter(
+              child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
                 child: Row(
                   children: [
-                    Text(
-                      'Rạp đề xuất (${filtered.length})',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFFEDEDED),
-                      ),
-                    ),
+                    // Số lượng rạp hiển thị sẽ set sau (khi có snapshot)
+                    const _TitleSkeleton(), // chỗ giữ layout, thay bằng real sau
                     const Spacer(),
-                    _cityPill(),
+                    _cityPill(_city),
                   ],
                 ),
               ),
-              // Danh sách rạp
-              if (isLoading)
-                const Padding(
-                  padding: EdgeInsets.all(50),
-                  child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
-                )
-              else
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (_, i) => _cinemaCard(
-                    cinema: filtered[i],
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              MovieSelectionScreen(cinema: filtered[i]),
+            ),
+
+            // ---------- Danh sách rạp realtime ----------
+            StreamBuilder<DatabaseEvent>(
+              stream: _db.child('cinemas').onValue,
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting &&
+                    !_hadDataOnce) {
+                  // Lần đầu: hiển thị loader lớn
+                  return const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(50),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF8B1E9B),
                         ),
-                      );
-                    },
+                      ),
+                    ),
+                  );
+                }
+
+                if (snap.hasError) {
+                  return const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'Không tải được danh sách rạp.',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    ),
+                  );
+                }
+
+                final raw = snap.data?.snapshot.value;
+                final cinemas = _parseCinemas(raw);
+                if (!_hadDataOnce && cinemas.isNotEmpty) _hadDataOnce = true;
+
+                final filtered = _filterCinemas(cinemas);
+
+                // Cập nhật tiêu đề có số lượng
+                final title = 'Rạp đề xuất (${filtered.length})';
+
+                // Ghép lại tiêu đề (thay skeleton ở trên)
+                final titleBar = SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Row(
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFFEDEDED),
+                          ),
+                        ),
+                        const Spacer(),
+                        _cityPill(_city),
+                      ],
+                    ),
                   ),
-                ),
-            ],
-          ),
+                );
+
+                if (cinemas.isEmpty) {
+                  return SliverList.list(
+                    children: [
+                      titleBar,
+                      const Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Center(
+                          child: Text(
+                            'Không có rạp khả dụng!',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                if (filtered.isEmpty) {
+                  return SliverList.list(
+                    children: [
+                      titleBar,
+                      const Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Center(
+                          child: Text(
+                            'Không có rạp khớp bộ lọc hiện tại',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                // Danh sách rạp sau khi lọc
+                return SliverList.separated(
+                  itemCount:
+                      filtered.length +
+                      1, // +1 để chèn lại titleBar (đã biết số)
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (_, i) {
+                    if (i == 0) return titleBar; // hàng đầu là tiêu đề thực tế
+                    final cinema = filtered[i - 1];
+
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                      child: _cinemaCard(
+                        cinema: cinema,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CinemaAboutScreen(cinema: cinema),
+                            ),
+                          );
+                        },
+                        onDirection: () => _openDirections(cinema.address),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          ],
         ),
       ),
     );
   }
 
-  /// Header gồm: nút back, tiêu đề, ô tìm kiếm và dải brand chips
-  Widget _headerSection(BuildContext context) => Container(
-    decoration: const BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [Color(0xFF11111A), Color(0xFF151521)],
+  // ------------------------- HEADER -------------------------
+  Widget _header(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF11111A), Color(0xFF151521)],
+        ),
       ),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(
-                  Icons.arrow_back_ios,
-                  color: Color(0xFFEDEDED),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back_ios,
+                    color: Color(0xFFEDEDED),
+                  ),
+                  onPressed: () => Navigator.pop(context),
                 ),
-                onPressed: () => Navigator.pop(context),
-              ),
-              const Spacer(),
-              _circleIcon(Icons.chat_bubble_outline),
-              const SizedBox(width: 8),
-              _circleIcon(Icons.close),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Chọn theo rạp',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFFEDEDED),
+                const Spacer(),
+                _circleIcon(Icons.chat_bubble_outline),
+                const SizedBox(width: 8),
+                _circleIcon(Icons.close),
+              ],
             ),
-          ),
-          const SizedBox(height: 12),
-          _searchField(),
-          const SizedBox(height: 12),
-          _brandChips(context),
-        ],
+            const SizedBox(height: 12),
+            const Text(
+              'Chọn theo rạp',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFFEDEDED),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _searchField(),
+            const SizedBox(height: 12),
+            _brandChips(),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
-  /// Icon tròn nhỏ (trang trí)
+  // Nút icon tròn trang trí
   Widget _circleIcon(IconData icon) => Container(
     width: 36,
     height: 36,
@@ -250,17 +343,17 @@ class _CinemaScreenState extends State<CinemaScreen> {
       color: Color(0xFF1E1E2A),
       shape: BoxShape.circle,
     ),
-    child: Icon(icon, size: 18, color: const Color(0xFFEDEDED)),
+    child: Icon(icon, size: 18, color: Color(0xFFEDEDED)),
   );
 
-  /// Ô tìm kiếm rạp
+  // Ô tìm kiếm với debounce
   Widget _searchField() => Container(
     decoration: BoxDecoration(
       color: const Color(0xFF151521),
       borderRadius: BorderRadius.circular(28),
     ),
     child: TextField(
-      onChanged: (v) => setState(() => searchQuery = v),
+      onChanged: _onSearchChanged,
       style: const TextStyle(color: Color(0xFFEDEDED)),
       decoration: const InputDecoration(
         hintText: 'Tìm rạp phim...',
@@ -272,13 +365,10 @@ class _CinemaScreenState extends State<CinemaScreen> {
     ),
   );
 
-  /// Dải brand chips (đã tinh chỉnh kích thước để không overflow)
-  Widget _brandChips(BuildContext context) {
-    final textScale = MediaQuery.textScaleFactorOf(context).clamp(0.9, 1.3);
-    final double totalHeight = 96 + (textScale - 1.0) * 6;
-
+  // Chips chọn brand
+  Widget _brandChips() {
     return SizedBox(
-      height: totalHeight,
+      height: 96,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.only(right: 6),
@@ -286,11 +376,10 @@ class _CinemaScreenState extends State<CinemaScreen> {
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (_, i) {
           final item = _brands[i];
-          final isSelected = selectedBrandKey == item['key'];
+          final isSelected = _brandKey == item['key'];
           return GestureDetector(
-            onTap: () => setState(
-              () => selectedBrandKey = isSelected ? null : item['key'],
-            ),
+            onTap: () =>
+                setState(() => _brandKey = isSelected ? null : item['key']),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -312,6 +401,9 @@ class _CinemaScreenState extends State<CinemaScreen> {
                     child: CachedNetworkImage(
                       imageUrl: item['icon']!,
                       fit: BoxFit.contain,
+                      memCacheWidth: 256, // ✅ tiết kiệm RAM
+                      errorWidget: (_, __, ___) =>
+                          const Icon(Icons.local_movies, color: Colors.white54),
                     ),
                   ),
                 ),
@@ -341,21 +433,21 @@ class _CinemaScreenState extends State<CinemaScreen> {
     );
   }
 
-  /// Chip TP đang chọn (giả lập)
-  Widget _cityPill() => Container(
+  // Pill thành phố (demo)
+  Widget _cityPill(String city) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     decoration: BoxDecoration(
       color: const Color(0xFF151521),
       borderRadius: BorderRadius.circular(24),
       border: Border.all(color: const Color(0xFF8B1E9B)),
     ),
-    child: const Row(
+    child: Row(
       children: [
-        Icon(Icons.location_on, size: 16, color: Color(0xFF8B1E9B)),
-        SizedBox(width: 6),
+        const Icon(Icons.location_on, size: 16, color: Color(0xFF8B1E9B)),
+        const SizedBox(width: 6),
         Text(
-          'TP.HN',
-          style: TextStyle(
+          city,
+          style: const TextStyle(
             color: Color(0xFFEDEDED),
             fontWeight: FontWeight.w700,
           ),
@@ -364,8 +456,12 @@ class _CinemaScreenState extends State<CinemaScreen> {
     ),
   );
 
-  /// Card 1 rạp + nút “Tìm đường”
-  Widget _cinemaCard({required Cinema cinema, required VoidCallback onTap}) {
+  // Card 1 rạp
+  Widget _cinemaCard({
+    required Cinema cinema,
+    required VoidCallback onTap,
+    required VoidCallback onDirection,
+  }) {
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,
@@ -388,6 +484,9 @@ class _CinemaScreenState extends State<CinemaScreen> {
                     width: 44,
                     height: 44,
                     fit: BoxFit.cover,
+                    memCacheWidth: 200, // ✅ nhẹ máy
+                    placeholder: (_, __) =>
+                        Container(color: const Color(0xFF222230)),
                     errorWidget: (_, __, ___) =>
                         const Icon(Icons.local_movies, color: Colors.white70),
                   ),
@@ -426,7 +525,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
             ),
             const SizedBox(height: 10),
             GestureDetector(
-              onTap: () => _openDirections(cinema.address),
+              onTap: onDirection,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -455,6 +554,23 @@ class _CinemaScreenState extends State<CinemaScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Skeleton nhỏ để giữ layout tiêu đề trước khi có realtime data
+class _TitleSkeleton extends StatelessWidget {
+  const _TitleSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 160,
+      height: 18,
+      decoration: BoxDecoration(
+        color: const Color(0xFF151521),
+        borderRadius: BorderRadius.circular(6),
       ),
     );
   }

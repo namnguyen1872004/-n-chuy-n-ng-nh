@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import '../models/movie.dart';
 
 /// ============================
-///   MÀN HÌNH CHỌN GHẾ
+///  MÀN HÌNH CHỌN GHẾ
+///  - Hiển thị layout ghế đơn giản
+///  - Thanh toán giả lập bằng QR
+///  - LƯU VÉ: tickets/{uid}/{orderId}  (phù hợp rules)
 /// ============================
 class SeatSelectionScreen extends StatefulWidget {
   final Movie movie;
@@ -27,13 +30,21 @@ class SeatSelectionScreen extends StatefulWidget {
 }
 
 class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
+  // ---- Cấu hình layout ghế ----
   static const int _rows = 10;
   static const int _cols = 8;
   static const double _tile = 30.0;
   static const double _gap = 6.0;
 
+  /// seats[r][c] = 'available' | 'vip' | 'booked'
   late final List<List<String>> seats;
+
+  /// Tập ghế đang chọn (mã như A1, B2…)
   final Set<String> selectedSeats = {};
+
+  // Firebase helpers
+  final _auth = FirebaseAuth.instance;
+  final _db = FirebaseDatabase.instance;
 
   @override
   void initState() {
@@ -41,24 +52,30 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
     _initSeats();
   }
 
-  /// 🔹 Khởi tạo sơ đồ ghế
+  /// Tạo sơ đồ ghế demo:
+  /// - Hàng đầu & cuối là VIP
+  /// - Một vài ghế bị khóa (booked) để mô phỏng
   void _initSeats() {
     seats = List.generate(_rows, (_) => List.filled(_cols, 'available'));
+    // VIP: hàng 0 và hàng cuối
     for (int c = 0; c < _cols; c++) {
       seats[0][c] = 'vip';
       seats[_rows - 1][c] = 'vip';
     }
+    // Một số ghế booked
     for (final id in ['A1', 'B2', 'C3', 'D4', 'E5']) {
       final r = id.codeUnitAt(0) - 65;
       final c = int.parse(id.substring(1)) - 1;
-      seats[r][c] = 'booked';
+      if (r >= 0 && r < _rows && c >= 0 && c < _cols) {
+        seats[r][c] = 'booked';
+      }
     }
   }
 
-  /// 🔹 Đổi trạng thái chọn ghế
+  /// Chọn / bỏ chọn ghế (trừ ghế booked)
   void _toggleSeat(int row, int col) {
-    final seatId = '${String.fromCharCode(65 + row)}${col + 1}';
     if (seats[row][col] == 'booked') return;
+    final seatId = '${String.fromCharCode(65 + row)}${col + 1}';
     setState(() {
       selectedSeats.contains(seatId)
           ? selectedSeats.remove(seatId)
@@ -66,34 +83,22 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
     });
   }
 
-  /// 🔹 Tính tổng tiền
-  double get totalPrice {
-    double total = 0;
+  /// Tính tổng tiền (VIP 150k, thường 100k)
+  int get totalPriceVND {
+    int total = 0;
     for (final id in selectedSeats) {
       final r = id.codeUnitAt(0) - 65;
       final c = int.parse(id.substring(1)) - 1;
-      total += seats[r][c] == 'vip' ? 150000 : 100000;
+      total += (seats[r][c] == 'vip') ? 150000 : 100000;
     }
     return total;
   }
 
-  /// 🔹 Sinh mã QR nhanh, tránh lag
-  Future<QrPainter> _generateQr(String data) async {
-    return await compute((String text) {
-      return QrPainter(
-        data: text,
-        version: QrVersions.auto,
-        color: Colors.black,
-        emptyColor: Colors.white,
-      );
-    }, data);
-  }
-
-  /// 🔹 Hiển thị dialog QR
+  /// Hiển thị dialog QR (dùng QrImageView cho nhẹ máy)
   void _showQrDialog() {
     final orderId = DateTime.now().millisecondsSinceEpoch.toString();
-    final total = totalPrice;
-    final qrData = 'PAY:${widget.movie.title}|$orderId|${total.toInt()}';
+    final total = totalPriceVND;
+    final qrData = 'PAY:${widget.movie.title}|$orderId|$total';
 
     showDialog(
       context: context,
@@ -104,83 +109,95 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
           'Quét mã QR thanh toán',
           style: TextStyle(color: Colors.white),
         ),
-        content: FutureBuilder<QrPainter>(
-          future: _generateQr(qrData),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const SizedBox(
-                height: 120,
-                child: Center(
-                  child: CircularProgressIndicator(color: Colors.white),
-                ),
-              );
-            }
-
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: CustomPaint(
-                    size: const Size(220, 220),
-                    painter: snapshot.data!,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '💰 ${NumberFormat('#,##0').format(total)} đ',
-                  style: const TextStyle(
-                    color: Colors.yellowAccent,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.check),
-                  label: const Text('Giả lập thanh toán thành công'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B1E9B),
-                  ),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _saveTicket(orderId);
-                  },
-                ),
-              ],
-            );
-          },
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ✅ Không dùng isolate: QrImageView là đủ nhanh, ít lỗi
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: QrImageView(
+                data: qrData,
+                version: QrVersions.auto,
+                size: 220,
+                backgroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '💰 ${NumberFormat('#,##0').format(total)} đ',
+              style: const TextStyle(
+                color: Colors.yellowAccent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.check),
+              label: const Text('Giả lập thanh toán thành công'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF8B1E9B),
+              ),
+              onPressed: () async {
+                Navigator.pop(context);
+                await _saveTicket(orderId);
+              },
+            ),
+          ],
         ),
       ),
     );
   }
 
-  /// 🔹 Lưu vé vào Firebase
+  /// LƯU VÉ VÀO Firebase THEO RULES:
+  /// - Đường dẫn: tickets/{uid}/{orderId}
+  /// - Field cần: userId, movieTitle, cinema, date, time, selectedSeats (List<String>), total (int)
   Future<void> _saveTicket(String orderId) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bạn cần đăng nhập để lưu vé.')),
+      );
+      return;
+    }
+
     try {
-      await FirebaseDatabase.instance.ref('tickets/$orderId').set({
+      final uid = user.uid;
+      final dateIso = widget.selectedDate.toIso8601String();
+      final timeStr =
+          '${widget.selectedTime.hour.toString().padLeft(2, '0')}:${widget.selectedTime.minute.toString().padLeft(2, '0')}';
+
+      // ✅ Ghi đúng chỗ: tickets/{uid}/{orderId}
+      await _db.ref('tickets/$uid/$orderId').set({
         'orderId': orderId,
+        'userId': uid, // giúp đối chiếu / migrate nếu cần
         'movieTitle': widget.movie.title,
         'cinema': widget.selectedCinema,
-        'date': widget.selectedDate.toIso8601String(),
-        'time':
-            '${widget.selectedTime.hour.toString().padLeft(2, '0')}:${widget.selectedTime.minute.toString().padLeft(2, '0')}',
-        'selectedSeats': selectedSeats.toList(),
-        'total': totalPrice,
+        'date': dateIso, // hoặc dùng key showDate nếu bạn đã chuyển code đọc
+        'time': timeStr, // hoặc showTime: "HH:mm"
+        'selectedSeats': selectedSeats.map((e) => e.toString()).toList(),
+        'total': totalPriceVND, // int để định dạng tiền chuẩn
+        'createdAt': DateTime.now().toIso8601String(),
       });
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('✅ Thanh toán thành công, vé đã được lưu!'),
           backgroundColor: Colors.green,
         ),
       );
+      // (tuỳ chọn) pop về trước hoặc điều hướng TicketManager:
+      // Navigator.pop(context);
     } catch (e) {
       debugPrint('🔥 Lỗi lưu vé: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Không lưu được vé: $e')));
     }
   }
 
@@ -216,7 +233,7 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
     );
   }
 
-  /// 🔹 Thông tin suất chiếu
+  // ---------- UI con ----------
   Widget _buildInfo(String date, String time) => Container(
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
@@ -248,7 +265,6 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
     ),
   );
 
-  /// 🔹 Màn hình rạp
   Widget _buildScreen() => Center(
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -271,7 +287,6 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
     ),
   );
 
-  /// 🔹 Lưới ghế
   Widget _buildSeatGrid() => Center(
     child: SizedBox(
       width: _cols * (_tile + _gap),
@@ -318,7 +333,6 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
     ),
   );
 
-  /// 🔹 Chú thích màu ghế
   Widget _buildLegend() => Row(
     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
     children: const [
@@ -329,53 +343,59 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
     ],
   );
 
-  /// 🔹 Thanh thanh toán
-  Widget _buildBottom() => Container(
-    padding: const EdgeInsets.all(20),
-    color: const Color(0xFF16213E),
-    child: SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (selectedSeats.isNotEmpty) ...[
-            Text(
-              'Ghế: ${selectedSeats.join(", ")}',
-              style: const TextStyle(color: Colors.white70),
-            ),
-            Text(
-              'Tổng: ${NumberFormat('#,##0').format(totalPrice)} đ',
-              style: const TextStyle(
-                color: Color(0xFFFFB800),
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+  Widget _buildBottom() {
+    final loggedIn = _auth.currentUser != null;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      color: const Color(0xFF16213E),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (selectedSeats.isNotEmpty) ...[
+              Text(
+                'Ghế: ${selectedSeats.join(", ")}',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              Text(
+                'Tổng: ${NumberFormat('#,##0').format(totalPriceVND)} đ',
+                style: const TextStyle(
+                  color: Color(0xFFFFB800),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            ElevatedButton(
+              onPressed: (!loggedIn || selectedSeats.isEmpty)
+                  ? null
+                  : _showQrDialog,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF8B1E9B),
+                disabledBackgroundColor: Colors.grey.shade700,
+                minimumSize: const Size(double.infinity, 50),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: Text(
+                !loggedIn
+                    ? 'Vui lòng đăng nhập'
+                    : (selectedSeats.isEmpty
+                          ? 'Vui lòng chọn ghế'
+                          : 'Thanh toán bằng QR'),
+                style: const TextStyle(color: Colors.white, fontSize: 16),
               ),
             ),
-            const SizedBox(height: 10),
           ],
-          ElevatedButton(
-            onPressed: selectedSeats.isEmpty ? null : () => _showQrDialog(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF8B1E9B),
-              disabledBackgroundColor: Colors.grey.shade700,
-              minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            child: Text(
-              selectedSeats.isEmpty
-                  ? 'Vui lòng chọn ghế'
-                  : 'Thanh toán bằng QR',
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-            ),
-          ),
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
-/// 🔹 Widget chú thích ghế
+/// Chú thích ghế
 class _Legend extends StatelessWidget {
   final String label;
   final Color color;
