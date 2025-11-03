@@ -8,6 +8,23 @@ import 'package:url_launcher/url_launcher.dart';
 import 'cinema_about_screen.dart';
 import '../models/cinema_model.dart';
 
+/// ---------------------------------------------------------------------------
+/// MÀN HÌNH CHỌN RẠP (CinemaScreen)
+/// - Nguồn dữ liệu: Firebase Realtime Database path `/cinemas` (stream onValue)
+/// - Cách lấy dữ liệu:
+///     + Lắng nghe thay đổi realtime bằng `_db.child('cinemas').onValue`
+///     + Map `DataSnapshot.value` -> `List<Cinema>` ngay trên stream để build() nhẹ
+/// - Tối ưu hiệu năng:
+///     + `distinct(...)` để tránh rebuild khi dữ liệu không đổi (so sánh name/address)
+///     + Debounce ô tìm kiếm (giảm setState liên tục)
+///     + Dùng `SliverList` + `SliverChildBuilderDelegate` cho list dài
+///     + Giới hạn memCacheWidth & tắt fade anim của ảnh (mượt hơn, ít jank)
+/// - Tương tác:
+///     + Gõ tìm kiếm -> lọc theo tên/địa chỉ
+///     + Chọn brand chip -> lọc theo brand suy diễn từ tên rạp (cgv/lotte/bhd)
+///     + Nhấn item -> push sang `CinemaAboutScreen`
+///     + Nút "Tìm đường" -> mở Google Maps chỉ đường tới địa chỉ rạp
+/// ---------------------------------------------------------------------------
 class CinemaScreen extends StatefulWidget {
   const CinemaScreen({super.key});
   @override
@@ -15,22 +32,23 @@ class CinemaScreen extends StatefulWidget {
 }
 
 class _CinemaScreenState extends State<CinemaScreen> {
+  // Tham chiếu gốc tới Realtime Database
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
 
-  // ---- UI state
+  // ---- UI state (bộ lọc, cờ nhận biết đã có dữ liệu lần đầu, city hiển thị)
   String _search = '';
-  String? _brandKey; // null = no filter
-  bool _hadDataOnce = false;
+  String? _brandKey; // null = không lọc theo brand
+  bool _hadDataOnce = false; // để phân biệt "đang tải lần đầu" vs "trống"
   final String _city = 'TP.HN';
 
-  // ---- debounce search
+  // ---- debounce search: tránh setState mỗi ký tự -> giảm rebuild
   Timer? _debounce;
   static const _searchDelay = Duration(milliseconds: 250);
 
-  // ---- realtime stream (đã parse sẵn)
+  // ---- realtime stream: đã parse sẵn sang List<Cinema> để build() nhẹ hơn
   late final Stream<List<Cinema>> _cinemas$;
 
-  // ---- brands
+  // ---- danh sách brand filter hiển thị (key hiển thị + icon)
   static const List<Map<String, String>> _brands = [
     {
       'key': 'cgv',
@@ -55,29 +73,33 @@ class _CinemaScreenState extends State<CinemaScreen> {
   @override
   void initState() {
     super.initState();
-    // Parse snapshot -> List<Cinema> NGAY TRÊN STREAM (giảm work trong build)
+    // Tạo stream realtime từ path '/cinemas'
+    // 1) onValue -> DataSnapshot
+    // 2) map -> parse snapshot.value thành List<Cinema> (_parseCinemas)
+    // 3) distinct -> chỉ emit khi nội dung thực sự đổi (dựa vào name/address)
     _cinemas$ = _db
         .child('cinemas')
         .onValue
         .map((e) => _parseCinemas(e.snapshot.value))
-        // distinct theo số lượng + tên (tránh rebuild khi data không đổi)
         .distinct((a, b) {
+          // So sánh đơn giản: số lượng + name/address theo cùng thứ tự
           if (a.length != b.length) return false;
           for (int i = 0; i < a.length; i++) {
             if (a[i].name != b[i].name || a[i].address != b[i].address) {
               return false;
             }
           }
-          return true;
+          return true; // không đổi -> không rebuild
         });
   }
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    _debounce?.cancel(); // hủy timer debounce khi rời màn hình
     super.dispose();
   }
 
+  /// Suy ra brand từ tên rạp (client-side): dùng để lọc theo chip
   String _detectBrand(String name) {
     final n = name.toLowerCase();
     if (n.contains('cgv')) return 'cgv';
@@ -86,6 +108,9 @@ class _CinemaScreenState extends State<CinemaScreen> {
     return 'other';
   }
 
+  /// Lọc danh sách rạp theo từ khoá (_search) + brand (_brandKey)
+  /// - q rỗng và brand null -> trả về nguyên danh sách (không copy thừa)
+  /// - trả List không growable để tránh bị sửa đổi ngoài ý muốn
   List<Cinema> _filterCinemas(List<Cinema> src) {
     final q = _search.trim().toLowerCase();
     if (q.isEmpty && _brandKey == null) return src;
@@ -103,6 +128,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
         .toList(growable: false);
   }
 
+  /// Mở Google Maps chỉ đường tới địa chỉ rạp (external app)
   Future<void> _openDirections(String address) async {
     if (address.trim().isEmpty) return;
     final uri = Uri.parse(
@@ -116,6 +142,9 @@ class _CinemaScreenState extends State<CinemaScreen> {
     }
   }
 
+  /// Parse snapshot.value -> List<Cinema>
+  /// - Hỗ trợ 2 case: value là Map (key bất kỳ) hoặc List (mảng)
+  /// - Mỗi phần tử map -> `Cinema.fromMap`
   List<Cinema> _parseCinemas(dynamic raw) {
     final out = <Cinema>[];
     if (raw is Map) {
@@ -128,10 +157,12 @@ class _CinemaScreenState extends State<CinemaScreen> {
         if (v is Map) out.add(Cinema.fromMap(Map<String, dynamic>.from(v)));
       }
     }
-    // Optional: out.sort((a,b) => a.name.compareTo(b.name));
+    // Có thể sort theo tên nếu muốn:
+    // out.sort((a,b) => a.name.compareTo(b.name));
     return out;
   }
 
+  /// Debounce cho ô tìm kiếm: chỉ setState sau 250ms không gõ tiếp
   void _onSearchChanged(String v) {
     _debounce?.cancel();
     _debounce = Timer(_searchDelay, () {
@@ -149,16 +180,17 @@ class _CinemaScreenState extends State<CinemaScreen> {
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
+            // -------- Header: back + title + search + brand chips --------
             SliverToBoxAdapter(child: _header(context)),
             const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
-            // Placeholder tiêu đề (sẽ thay khi có data)
+            // Placeholder tiêu đề trước khi có data realtime (giữ layout)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
                 child: Row(
                   children: const [
-                    _TitleSkeleton(),
+                    _TitleSkeleton(), // khối giả để giữ vị trí tiêu đề
                     Spacer(),
                     _CityPill(city: 'TP.HN'),
                   ],
@@ -166,10 +198,11 @@ class _CinemaScreenState extends State<CinemaScreen> {
               ),
             ),
 
-            // Danh sách rạp realtime (đã parse sẵn)
+            // -------- Stream danh sách rạp (đã parse sẵn ra List<Cinema>) --------
             StreamBuilder<List<Cinema>>(
               stream: _cinemas$,
               builder: (context, snap) {
+                // Lần đầu chờ dữ liệu -> hiện loader to
                 if (snap.connectionState == ConnectionState.waiting &&
                     !_hadDataOnce) {
                   return const SliverToBoxAdapter(
@@ -184,6 +217,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
                   );
                 }
 
+                // Có lỗi stream -> thông báo
                 if (snap.hasError) {
                   return const SliverToBoxAdapter(
                     child: Padding(
@@ -196,12 +230,15 @@ class _CinemaScreenState extends State<CinemaScreen> {
                   );
                 }
 
+                // Lấy data (có thể rỗng)
                 final data = snap.data ?? const <Cinema>[];
                 if (!_hadDataOnce && data.isNotEmpty) _hadDataOnce = true;
 
+                // Lọc theo từ khoá & brand
                 final filtered = _filterCinemas(data);
                 final title = 'Rạp đề xuất (${filtered.length})';
 
+                // Case: không có bất kỳ rạp nào từ server
                 if (data.isEmpty) {
                   return SliverList(
                     delegate: SliverChildListDelegate.fixed([
@@ -219,6 +256,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
                   );
                 }
 
+                // Case: có rạp nhưng lọc xong trống
                 if (filtered.isEmpty) {
                   return SliverList(
                     delegate: SliverChildListDelegate.fixed([
@@ -236,19 +274,22 @@ class _CinemaScreenState extends State<CinemaScreen> {
                   );
                 }
 
-                // --- Danh sách hiệu quả: SliverChildBuilderDelegate
+                // ---- Danh sách rạp hiệu quả: build theo index (SliverChildBuilderDelegate)
                 return SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
+                      // Hàng đầu tiên là thanh tiêu đề thật (đã biết số lượng)
                       if (index == 0) {
                         return _TitleRow(title: title, city: _city);
                       }
+                      // Các hàng tiếp theo là card rạp
                       final cinema = filtered[index - 1];
                       return Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                         child: _CinemaCard(
                           cinema: cinema,
                           onTap: () {
+                            // Điều hướng sang màn "Giới thiệu rạp"
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -261,10 +302,10 @@ class _CinemaScreenState extends State<CinemaScreen> {
                         ),
                       );
                     },
-                    childCount: filtered.length + 1,
-                    addAutomaticKeepAlives: false,
-                    addRepaintBoundaries: true,
-                    addSemanticIndexes: false,
+                    childCount: filtered.length + 1, // +1 cho title row
+                    addAutomaticKeepAlives: false, // giảm overhead
+                    addRepaintBoundaries: true, // tách repaint cho từng item
+                    addSemanticIndexes: false, // bớt index semantics
                   ),
                 );
               },
@@ -276,7 +317,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
     );
   }
 
-  // ---------------- HEADER
+  // ---------------- HEADER (gradient + back + title + search + brand chips)
   Widget _header(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
@@ -291,6 +332,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Thanh top: back + 2 icon tròn
             Row(
               children: [
                 IconButton(
@@ -316,22 +358,23 @@ class _CinemaScreenState extends State<CinemaScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            _searchField(),
+            _searchField(), // Ô tìm kiếm (debounce)
             const SizedBox(height: 12),
-            _brandChips(),
+            _brandChips(), // Chips brand để lọc nhanh
           ],
         ),
       ),
     );
   }
 
+  /// Ô tìm kiếm với style tối
   Widget _searchField() => Container(
     decoration: BoxDecoration(
       color: const Color(0xFF151521),
       borderRadius: BorderRadius.circular(28),
     ),
     child: TextField(
-      onChanged: _onSearchChanged,
+      onChanged: _onSearchChanged, // debounce 250ms
       style: const TextStyle(color: Color(0xFFEDEDED)),
       decoration: const InputDecoration(
         hintText: 'Tìm rạp phim...',
@@ -343,6 +386,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
     ),
   );
 
+  /// Hàng chips brand (CGV/Lotte/BHD)
   Widget _brandChips() {
     return SizedBox(
       height: 96,
@@ -360,6 +404,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Ô icon brand
                 Container(
                   width: 64,
                   height: 64,
@@ -368,7 +413,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: isSelected
-                          ? const Color(0xFF8B1E9B)
+                          ? const Color(0xFF8B1E9B) // viền tím khi chọn
                           : const Color(0xFF222230),
                       width: isSelected ? 2 : 1,
                     ),
@@ -378,8 +423,8 @@ class _CinemaScreenState extends State<CinemaScreen> {
                     child: CachedNetworkImage(
                       imageUrl: item['icon']!,
                       fit: BoxFit.contain,
-                      memCacheWidth: 256,
-                      fadeInDuration: Duration.zero,
+                      memCacheWidth: 256, // ảnh nhỏ, tiết kiệm RAM
+                      fadeInDuration: Duration.zero, // tắt animation để mượt
                       fadeOutDuration: Duration.zero,
                       filterQuality: FilterQuality.low,
                       errorWidget: (_, __, ___) =>
@@ -388,6 +433,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
                   ),
                 ),
                 const SizedBox(height: 6),
+                // Tên brand
                 SizedBox(
                   width: 64,
                   child: Text(
@@ -416,6 +462,7 @@ class _CinemaScreenState extends State<CinemaScreen> {
 
 // ----------------- Stateless helper widgets (const-friendly)
 
+/// Nút icon tròn trang trí ở header
 class _CircleIcon extends StatelessWidget {
   final IconData icon;
   const _CircleIcon({required this.icon});
@@ -433,6 +480,7 @@ class _CircleIcon extends StatelessWidget {
   }
 }
 
+/// Pill hiển thị thành phố ở tiêu đề phụ
 class _CityPill extends StatelessWidget {
   final String city;
   const _CityPill({required this.city});
@@ -462,6 +510,7 @@ class _CityPill extends StatelessWidget {
   }
 }
 
+/// Hàng tiêu đề thật (sau khi có dữ liệu) gồm title đếm số rạp + city pill
 class _TitleRow extends StatelessWidget {
   final String title;
   final String city;
@@ -488,6 +537,7 @@ class _TitleRow extends StatelessWidget {
   }
 }
 
+/// Card 1 rạp: ảnh + tên + địa chỉ + nút "Tìm đường"
 class _CinemaCard extends StatelessWidget {
   final Cinema cinema;
   final VoidCallback onTap;
@@ -502,7 +552,7 @@ class _CinemaCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: onTap,
+      onTap: onTap, // mở màn CinemaAboutScreen
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -513,6 +563,7 @@ class _CinemaCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Hàng trên: ảnh logo rạp + tên + địa chỉ + chevron
             Row(
               children: [
                 ClipRRect(
@@ -522,10 +573,10 @@ class _CinemaCard extends StatelessWidget {
                     width: 44,
                     height: 44,
                     fit: BoxFit.cover,
-                    memCacheWidth: 200,
-                    fadeInDuration: Duration.zero,
+                    memCacheWidth: 200, // ảnh nhỏ, đủ sắc nét
+                    fadeInDuration: Duration.zero, // tắt anim -> mượt
                     fadeOutDuration: Duration.zero,
-                    filterQuality: FilterQuality.low,
+                    filterQuality: FilterQuality.low, // lọc nhẹ
                     placeholder: (_, __) =>
                         Container(color: const Color(0xFF222230)),
                     errorWidget: (_, __, ___) =>
@@ -537,6 +588,7 @@ class _CinemaCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Tên rạp
                       Text(
                         cinema.name,
                         maxLines: 1,
@@ -548,6 +600,7 @@ class _CinemaCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
+                      // Địa chỉ rạp
                       Text(
                         cinema.address,
                         maxLines: 2,
@@ -565,6 +618,7 @@ class _CinemaCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
+            // Nút "Tìm đường" -> gọi onDirection mở Maps
             GestureDetector(
               onTap: onDirection,
               child: Container(
@@ -600,7 +654,7 @@ class _CinemaCard extends StatelessWidget {
   }
 }
 
-/// Skeleton giữ layout tiêu đề trước realtime
+/// Skeleton giữ layout tiêu đề trước realtime (tránh nhảy layout)
 class _TitleSkeleton extends StatelessWidget {
   const _TitleSkeleton();
   @override

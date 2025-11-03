@@ -9,6 +9,11 @@ import '../models/movie.dart';
 /// ============================
 ///   MÀN HÌNH TRANG CHỦ (HOME)
 /// ============================
+/// Nhiệm vụ:
+/// - Đọc dữ liệu phim từ Firebase Realtime Database (node /movies) 1 lần khi mở màn
+/// - Tách phim thành 2 nhóm: đang chiếu (releaseDate < now) & sắp chiếu (releaseDate > now)
+/// - Cho phép lọc thể loại độc lập cho mỗi nhóm (bottom sheet)
+/// - Có thanh tìm kiếm mở SearchDelegate, và BottomNavigationBar điều hướng
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
@@ -17,59 +22,78 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Danh sách phim và trạng thái tải
+  // Danh sách phim sau khi lấy và parse từ DB
   List<Movie> movies = [];
+
+  // Cờ hiển thị spinner khi đang tải
   bool isLoading = true;
 
-  // Kết nối Firebase Database
+  // Con trỏ gốc tới Firebase Realtime Database
+  // .ref() trả về DatabaseReference, dùng .child('movies') để đọc node con
   final _database = FirebaseDatabase.instance.ref();
 
-  // Chỉ số thanh điều hướng dưới
+  // Vị trí tab đang chọn trong BottomNavigationBar
   int _selectedIndex = 0;
 
-  // Biến lọc thể loại
+  // Thể loại đang lọc cho "Phim đang chiếu" (null = không lọc)
   String? _selectedGenreNow;
+
+  // Thể loại đang lọc cho "Phim sắp chiếu" (null = không lọc)
   String? _selectedGenreComing;
 
   @override
   void initState() {
     super.initState();
+    // Khi màn hình được tạo lần đầu, gọi đọc dữ liệu
     _fetchMovies();
   }
 
   /// 🔹 Lấy danh sách phim từ Firebase Realtime Database
+  /// - Đọc 1 lần (GET) tại node /movies
+  /// - parse kết quả có thể là Map (key-value) hoặc List (index-based)
+  /// - Sau khi parse thành List<Movie>, setState để cập nhật UI
   Future<void> _fetchMovies() async {
     try {
+      // Gọi GET /movies 1 lần
       final snapshot = await _database.child('movies').get();
       if (!snapshot.exists || snapshot.value == null) return;
 
       final fetched = <Movie>[];
       final data = snapshot.value;
 
-      // Parse dữ liệu trả về (có thể là Map hoặc List)
+      // Firebase có thể trả Map hoặc List; xử lý cả 2
       if (data is Map) {
+        // Map<dynamic, dynamic> -> duyệt từng value (v)
         data.forEach((_, v) {
-          if (v is Map)
+          if (v is Map) {
+            // Ép kiểu an toàn rồi truyền cho Movie.fromMap (do bạn định nghĩa)
             fetched.add(Movie.fromMap(Map<String, dynamic>.from(v)));
+          }
         });
       } else if (data is List) {
+        // Nếu là List -> duyệt từng phần tử
         for (final v in data) {
-          if (v is Map)
+          if (v is Map) {
             fetched.add(Movie.fromMap(Map<String, dynamic>.from(v)));
+          }
         }
       }
 
+      // Cập nhật state sau khi tải xong
       setState(() {
-        movies = fetched;
-        isLoading = false;
+        movies = fetched; // lưu danh sách phim đã parse
+        isLoading = false; // tắt spinner
       });
     } catch (e) {
+      // Nếu lỗi, tắt spinner và log
       setState(() => isLoading = false);
       debugPrint('Error fetching movies: $e');
     }
   }
 
   /// 🔹 Xử lý sự kiện khi bấm vào icon trong thanh bottom navigation
+  /// - Chỉ số 0 là HOME (đang ở trang này) → không push
+  /// - Các chỉ số 1..3 sẽ push tới route định nghĩa sẵn
   void _onItemTapped(int index) {
     setState(() => _selectedIndex = index);
     final routes = ['/home', '/cinema', '/snack', '/profile'];
@@ -78,8 +102,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// 🔹 Hiển thị hộp chọn thể loại phim (Bottom Sheet)
+  /// 🔹 Mở bottom sheet chọn thể loại
+  /// - isNowShowing = true: set lọc cho nhóm "đang chiếu"
+  /// - isNowShowing = false: set lọc cho nhóm "sắp chiếu"
   void _showGenreFilter({required bool isNowShowing}) {
+    // Gom tất cả thể loại từ toàn bộ danh sách phim -> loại trùng -> sort
     final genres =
         movies
             .expand((m) => m.genre.split(',').map((g) => g.trim()))
@@ -88,17 +115,20 @@ class _HomeScreenState extends State<HomeScreen> {
             .toList()
           ..sort();
 
+    // Mở bottom sheet (nền trong suốt)
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => GenreFilterSheet(
         genres: genres,
+        // Khi chọn 1 thể loại (hoặc "Tất cả" = null), cập nhật biến lọc
         onSelect: (selected) {
           setState(() {
-            if (isNowShowing)
+            if (isNowShowing) {
               _selectedGenreNow = selected;
-            else
+            } else {
               _selectedGenreComing = selected;
+            }
           });
         },
       ),
@@ -108,6 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 🔹 Giao diện chính
   @override
   Widget build(BuildContext context) {
+    // Nếu đang tải dữ liệu, hiển thị spinner full màn
     if (isLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFF0B0B0F),
@@ -117,16 +148,27 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    // Lấy thời điểm hiện tại để so sánh ngày phát hành
     final now = DateTime.now();
 
-    // Phân loại phim
+    // Phân loại phim theo ngày phát hành
     final nowShowing = movies
-        .where((m) => m.releaseDate.isBefore(now))
+        .where(
+          (m) => m.releaseDate.isBefore(now),
+        ) // đang chiếu: ngày phát hành < hiện tại
         .toList();
-    final comingSoon = movies.where((m) => m.releaseDate.isAfter(now)).toList()
-      ..sort((a, b) => a.releaseDate.compareTo(b.releaseDate));
 
-    // Áp dụng bộ lọc thể loại
+    final comingSoon =
+        movies
+            .where(
+              (m) => m.releaseDate.isAfter(now),
+            ) // sắp chiếu: ngày phát hành > hiện tại
+            .toList()
+          ..sort(
+            (a, b) => a.releaseDate.compareTo(b.releaseDate),
+          ); // sắp theo ngày phát hành tăng dần
+
+    // Áp dụng bộ lọc thể loại nếu có chọn (null = không lọc)
     final filteredNow = _selectedGenreNow == null
         ? nowShowing
         : nowShowing
@@ -141,37 +183,52 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B0B0F),
+
+      // AppBar custom: thanh tìm kiếm "giả" -> bấm mở SearchDelegate
       appBar: _buildSearchBar(context),
+
+      // Nội dung chính cuộn dọc
       body: SingleChildScrollView(
         child: Column(
           children: [
+            // Slider phim nổi bật: lấy từ nhóm đang chiếu
             MovieCarousel(movies: nowShowing),
+
+            // Header + nút filter cho "Phim đang chiếu"
             SectionHeader(
               title: 'Phim đang chiếu',
-              genre: _selectedGenreNow,
+              genre: _selectedGenreNow, // hiển thị tag thể loại đang lọc
               onFilterTap: () => _showGenreFilter(isNowShowing: true),
             ),
+            // Danh sách ngang phim đang chiếu (đã áp lọc)
             MovieHorizontalList(list: filteredNow),
+
+            // Header + nút filter cho "Phim sắp chiếu"
             SectionHeader(
               title: 'Phim sắp chiếu',
               genre: _selectedGenreComing,
               onFilterTap: () => _showGenreFilter(isNowShowing: false),
             ),
+            // Danh sách ngang phim sắp chiếu (đã áp lọc)
             MovieHorizontalList(list: filteredComing),
           ],
         ),
       ),
+
+      // Thanh điều hướng dưới cùng
       bottomNavigationBar: _buildBottomBar(),
     );
   }
 
   /// 🔍 Thanh tìm kiếm phim — mở SearchDelegate khi bấm vào
+  /// - Không nhập trực tiếp ở đây; chỉ là 1 container bắt tap để mở Search UI
   PreferredSizeWidget _buildSearchBar(BuildContext context) {
     return AppBar(
       backgroundColor: const Color(0xFF0B0B0F),
       elevation: 0,
       title: GestureDetector(
         onTap: () {
+          // Mở SearchDelegate, truyền toàn bộ danh sách movies hiện có
           showSearch(context: context, delegate: MovieSearchDelegate(movies));
         },
         child: Container(
@@ -183,12 +240,12 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: const [
-              Icon(Icons.search, color: Colors.white), // 🔹 icon trắng
+              Icon(Icons.search, color: Colors.white), // icon trắng
               SizedBox(width: 8),
               Text(
                 'Tìm phim, rạp chiếu...',
                 style: TextStyle(
-                  color: Colors.white, // 🔹 đổi màu chữ sang trắng
+                  color: Colors.white, // placeholder trắng
                   fontSize: 15,
                 ),
               ),
@@ -197,6 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       actions: [
+        // Nút thông báo minh hoạ
         IconButton(
           icon: const Icon(Icons.notifications_none, color: Colors.white),
           tooltip: 'Thông báo',
@@ -211,6 +269,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// 🔹 Thanh điều hướng dưới cùng
+  /// - Giữ theme tối, màu chọn là tím (#8B1E9B)
+  /// - Khi tap: gọi _onItemTapped để push route nếu không phải HOME
   Widget _buildBottomBar() {
     return Container(
       decoration: BoxDecoration(
@@ -252,6 +312,8 @@ class _HomeScreenState extends State<HomeScreen> {
 /// ============================
 
 /// 🎞️ Slider phim nổi bật
+/// - Dùng package carousel_slider
+/// - Tự động chạy, phóng to item trung tâm, chỉ lấy tối đa 5 phim (tránh nặng)
 class MovieCarousel extends StatelessWidget {
   final List<Movie> movies;
   const MovieCarousel({super.key, required this.movies});
@@ -267,10 +329,12 @@ class MovieCarousel extends StatelessWidget {
           enlargeCenterPage: true,
           viewportFraction: 0.8,
         ),
+        // Chỉ render tối đa 5 item để mượt hơn
         itemCount: movies.length.clamp(0, 5),
         itemBuilder: (context, index, _) {
           final movie = movies[index];
           return GestureDetector(
+            // Bấm vào poster -> mở màn chi tiết (route /details), truyền Movie làm arguments
             onTap: () =>
                 Navigator.pushNamed(context, '/details', arguments: movie),
             child: ClipRRect(
@@ -278,9 +342,11 @@ class MovieCarousel extends StatelessWidget {
               child: CachedNetworkImage(
                 imageUrl: movie.posterUrl,
                 fit: BoxFit.cover,
+                // Hiển thị spinner nhỏ khi ảnh chưa tải xong
                 placeholder: (_, __) => const Center(
                   child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
                 ),
+                // Nếu lỗi ảnh -> icon báo lỗi
                 errorWidget: (_, __, ___) =>
                     const Icon(Icons.broken_image, color: Colors.white38),
               ),
@@ -292,11 +358,11 @@ class MovieCarousel extends StatelessWidget {
   }
 }
 
-/// 🏷️ Tiêu đề từng phần phim
+/// 🏷️ Tiêu đề từng phần phim + nút lọc thể loại
 class SectionHeader extends StatelessWidget {
-  final String title;
-  final String? genre;
-  final VoidCallback onFilterTap;
+  final String title; // tên section: "Phim đang chiếu" / "Phim sắp chiếu"
+  final String? genre; // thể loại đang lọc (null = không lọc)
+  final VoidCallback onFilterTap; // hàm mở bottom sheet
 
   const SectionHeader({
     super.key,
@@ -312,6 +378,7 @@ class SectionHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // Tiêu đề section
           Text(
             title,
             style: const TextStyle(
@@ -320,6 +387,7 @@ class SectionHeader extends StatelessWidget {
               color: Colors.white,
             ),
           ),
+          // Nút filter: hiện "Bộ lọc" hoặc "Bộ lọc: <genre>"
           TextButton.icon(
             onPressed: onFilterTap,
             icon: const Icon(Icons.filter_list, color: Colors.white),
@@ -334,7 +402,7 @@ class SectionHeader extends StatelessWidget {
   }
 }
 
-/// 🎬 Danh sách phim ngang
+/// 🎬 Danh sách phim ngang (sử dụng ListView.builder để hiệu năng tốt)
 class MovieHorizontalList extends StatelessWidget {
   final List<Movie> list;
   const MovieHorizontalList({super.key, required this.list});
@@ -342,7 +410,7 @@ class MovieHorizontalList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 220,
+      height: 220, // cố định chiều cao item ngang
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -353,7 +421,8 @@ class MovieHorizontalList extends StatelessWidget {
   }
 }
 
-/// 🎫 Thẻ phim
+/// 🎫 Thẻ phim (poster + tên phim)
+/// - onTap poster -> mở màn chi tiết /details
 class MovieCard extends StatelessWidget {
   final Movie movie;
   const MovieCard({super.key, required this.movie});
@@ -361,11 +430,12 @@ class MovieCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 130,
+      width: 130, // chiều rộng mỗi thẻ
       margin: const EdgeInsets.only(right: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // Poster chiếm phần lớn chiều cao
           Expanded(
             child: GestureDetector(
               onTap: () =>
@@ -385,6 +455,7 @@ class MovieCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
+          // Tên phim, tối đa 2 dòng, căn giữa
           Text(
             movie.title,
             maxLines: 2,
@@ -403,9 +474,11 @@ class MovieCard extends StatelessWidget {
 }
 
 /// 📋 Bottom sheet chọn thể loại
+/// - Hiển thị danh sách thể loại đã tổng hợp từ toàn bộ phim
+/// - Dòng đầu "Tất cả" -> trả null để xóa lọc
 class GenreFilterSheet extends StatelessWidget {
-  final List<String> genres;
-  final ValueChanged<String?> onSelect;
+  final List<String> genres; // danh sách thể loại duy nhất (đã sort)
+  final ValueChanged<String?> onSelect; // callback khi chọn (null = tất cả)
 
   const GenreFilterSheet({
     super.key,
@@ -416,8 +489,8 @@ class GenreFilterSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.7,
+      expand: false, // không chiếm full, cho phép kéo
+      initialChildSize: 0.7, // mở lên khoảng 70% chiều cao
       builder: (_, scrollController) {
         return Container(
           decoration: const BoxDecoration(
@@ -426,6 +499,7 @@ class GenreFilterSheet extends StatelessWidget {
           ),
           child: Column(
             children: [
+              // Header của sheet
               Padding(
                 padding: const EdgeInsets.symmetric(
                   vertical: 12,
@@ -450,12 +524,14 @@ class GenreFilterSheet extends StatelessWidget {
                 ),
               ),
               const Divider(color: Colors.white24),
+              // Danh sách thể loại có thể cuộn
               Expanded(
                 child: ListView.builder(
                   controller: scrollController,
-                  itemCount: genres.length + 1,
+                  itemCount: genres.length + 1, // +1 cho mục "Tất cả"
                   itemBuilder: (context, index) {
                     if (index == 0) {
+                      // Mục đầu: xóa lọc
                       return ListTile(
                         title: const Text(
                           'Tất cả',
@@ -474,7 +550,7 @@ class GenreFilterSheet extends StatelessWidget {
                         style: const TextStyle(color: Colors.white),
                       ),
                       onTap: () {
-                        onSelect(g);
+                        onSelect(g); // trả về thể loại được chọn
                         Navigator.pop(context);
                       },
                     );
@@ -492,16 +568,19 @@ class GenreFilterSheet extends StatelessWidget {
 /// ============================
 ///   SEARCH DELEGATE (TÌM KIẾM)
 /// ============================
+/// - Cấu trúc chuẩn của Flutter để làm UI tìm kiếm full-screen
+/// - Tận dụng danh sách "movies" đã có; không gọi DB lần nữa
 class MovieSearchDelegate extends SearchDelegate<String> {
-  final List<Movie> movies;
-  final String initialQuery;
+  final List<Movie> movies; // danh sách nguồn để lọc
+  final String initialQuery; // nếu muốn mở sẵn với query mặc định
 
   MovieSearchDelegate(this.movies, {this.initialQuery = ''}) {
-    query = initialQuery;
+    query = initialQuery; // gán query ban đầu
   }
 
   @override
   ThemeData appBarTheme(BuildContext context) {
+    // Tùy biến theme cho giao diện search (nền tối, chữ trắng)
     final base = Theme.of(context);
     return base.copyWith(
       scaffoldBackgroundColor: const Color(0xFF0B0B0F),
@@ -512,8 +591,8 @@ class MovieSearchDelegate extends SearchDelegate<String> {
       ),
       inputDecorationTheme: InputDecorationTheme(
         hintStyle: const TextStyle(
-          color: Colors.white70,
-        ), // 🔹 placeholder trắng
+          color: Colors.white70, // placeholder trắng
+        ),
         filled: true,
         fillColor: const Color(0xFF151521),
         border: OutlineInputBorder(
@@ -522,11 +601,12 @@ class MovieSearchDelegate extends SearchDelegate<String> {
         ),
       ),
       textTheme: const TextTheme(
-        titleLarge: TextStyle(color: Colors.white), // 🔹 chữ nhập vào màu trắng
+        titleLarge: TextStyle(color: Colors.white), // text nhập vào màu trắng
       ),
     );
   }
 
+  // Nút action bên phải (nút xóa query)
   @override
   List<Widget> buildActions(BuildContext context) => [
     IconButton(
@@ -535,12 +615,14 @@ class MovieSearchDelegate extends SearchDelegate<String> {
     ),
   ];
 
+  // Nút leading bên trái (quay lại)
   @override
   Widget buildLeading(BuildContext context) => IconButton(
     icon: const Icon(Icons.arrow_back, color: Colors.white),
-    onPressed: () => close(context, ''),
+    onPressed: () => close(context, ''), // đóng search, trả về chuỗi rỗng
   );
 
+  // Kết quả tìm kiếm khi nhấn submit/search
   @override
   Widget buildResults(BuildContext context) {
     final results = _filterMovies(query);
@@ -553,6 +635,7 @@ class MovieSearchDelegate extends SearchDelegate<String> {
       );
     }
 
+    // Danh sách kết quả: hiển thị poster + tên + đạo diễn
     return Container(
       color: const Color(0xFF0B0B0F),
       child: ListView.builder(
@@ -581,11 +664,10 @@ class MovieSearchDelegate extends SearchDelegate<String> {
               style: const TextStyle(color: Colors.white70),
             ),
             onTap: () {
-              Navigator.pushNamed(
-                context,
-                '/details',
-                arguments: movie,
-              ).then((_) => close(context, movie.title));
+              // Mở màn chi tiết, truyền movie
+              Navigator.pushNamed(context, '/details', arguments: movie).then(
+                (_) => close(context, movie.title),
+              ); // đóng search khi quay lại
             },
           );
         },
@@ -593,6 +675,7 @@ class MovieSearchDelegate extends SearchDelegate<String> {
     );
   }
 
+  // Gợi ý realtime khi gõ (không cần submit)
   @override
   Widget buildSuggestions(BuildContext context) {
     final suggestions = _filterMovies(query);
@@ -607,6 +690,7 @@ class MovieSearchDelegate extends SearchDelegate<String> {
               movie.title,
               style: const TextStyle(color: Colors.white70),
             ),
+            // bấm gợi ý -> đổ text vào ô tìm kiếm (chưa điều hướng)
             onTap: () => query = movie.title,
           );
         },
@@ -614,7 +698,9 @@ class MovieSearchDelegate extends SearchDelegate<String> {
     );
   }
 
-  /// Lọc danh sách phim theo từ khóa
+  /// Lọc danh sách phim theo từ khóa (không phân biệt hoa/thường)
+  /// - Nếu query rỗng, trả [] (để suggestions trống, UI gọn gàng)
+  /// - So khớp theo title hoặc director
   List<Movie> _filterMovies(String q) {
     if (q.isEmpty) return [];
     final lower = q.toLowerCase();

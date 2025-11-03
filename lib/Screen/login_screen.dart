@@ -9,7 +9,8 @@ import 'register_screen.dart';
 
 /// Màn hình đăng nhập
 class LoginScreen extends StatefulWidget {
-  final AuthService authService;
+  final AuthService
+  authService; // Service bọc các thao tác đăng nhập (email/pass, Google, ...)
   const LoginScreen({Key? key, required this.authService}) : super(key: key);
 
   @override
@@ -18,19 +19,21 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   // -------------------- Controllers & State --------------------
-  final _formKey = GlobalKey<FormState>();
+  final _formKey = GlobalKey<FormState>(); // key để validate Form
   final _usernameCtrl =
-      TextEditingController(); // dùng username, không phải email
-  final _passwordCtrl = TextEditingController();
+      TextEditingController(); // dùng username (không phải email trực tiếp)
+  final _passwordCtrl = TextEditingController(); // mật khẩu
 
-  bool _isLoading = false;
-  bool _obscurePw = true;
+  bool _isLoading = false; // cờ đang xử lý để khóa UI/nút
+  bool _obscurePw = true; // cờ ẩn/hiện mật khẩu
 
   // Realtime Database root (tạo sẵn để tái sử dụng)
+  // -> Sử dụng để map username -> uid, và lấy email từ uid
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
 
   @override
   void dispose() {
+    // Giải phóng controller khi widget bị huỷ
     _usernameCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
@@ -38,15 +41,24 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // -------------------- Helpers UI --------------------
   void _toggleLoading(bool v) {
+    // Helper bật/tắt trạng thái loading an toàn (kiểm tra mounted)
     if (mounted) setState(() => _isLoading = v);
   }
 
   void _showSnack(String msg) {
+    // Helper hiển thị SnackBar thông báo
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   // -------------------- Core: Đăng nhập bằng username + password --------------------
+  /// Luồng đăng nhập:
+  /// 1) Validate form (username không rỗng, password >= 6)
+  /// 2) Chuẩn hoá username (trim + lowercase) -> tránh trùng khác hoa/thường
+  /// 3) Truy vấn /usernames/{username} -> lấy uid
+  /// 4) Truy vấn /users/{uid}/email -> lấy email
+  /// 5) Gọi FirebaseAuth đăng nhập bằng email + mật khẩu
+  /// 6) Điều hướng về /home nếu thành công, hiển thị thông báo nếu lỗi
   Future<void> _loginWithUsernamePassword() async {
     // 1) Validate form
     if (!_formKey.currentState!.validate()) return;
@@ -56,19 +68,21 @@ class _LoginScreenState extends State<LoginScreen> {
       // 2) Chuẩn hoá username (lowercase, trim)
       final uname = _usernameCtrl.text.trim().toLowerCase();
 
-      // 3) Tìm uid theo username: /usernames/{username} -> uid
+      // 3) Tìm uid theo username: /usernames/{username} -> uid (String)
       final unameSnap = await _db
-          .child('usernames/$uname')
+          .child('usernames/$uname') // node map username -> uid
           .get()
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 5)); // tránh treo request
+
+      // Kiểm tra tồn tại & kiểu dữ liệu
       if (!unameSnap.exists ||
           (unameSnap.value as String?)?.isNotEmpty != true) {
         _showSnack('Không tìm thấy tên đăng nhập.');
-        return;
+        return; // dừng luôn nếu không có mapping
       }
       final uid = unameSnap.value as String;
 
-      // 4) Lấy email theo uid: /users/{uid}/email -> email
+      // 4) Lấy email theo uid: /users/{uid}/email -> email (String)
       final emailSnap = await _db
           .child('users/$uid/email')
           .get()
@@ -76,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final email = (emailSnap.value as String?)?.trim();
       if (email == null || email.isEmpty) {
         _showSnack('Tài khoản không có email hợp lệ.');
-        return;
+        return; // không thể đăng nhập FirebaseAuth nếu thiếu email
       }
 
       // 5) Firebase Auth: đăng nhập bằng email vừa resolve được
@@ -85,10 +99,11 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordCtrl.text.trim(),
       );
 
+      // 6) Nếu thành công -> điều hướng về Home (xoá stack)
       if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
     } on FirebaseAuthException catch (e) {
-      // Thông điệp ngắn gọn, dễ hiểu
+      // Mapping mã lỗi FirebaseAuth -> thông điệp tiếng Việt thân thiện
       final msg = switch (e.code) {
         'wrong-password' => 'Mật khẩu không chính xác.',
         'user-not-found' => 'Không tìm thấy tài khoản.',
@@ -98,17 +113,23 @@ class _LoginScreenState extends State<LoginScreen> {
       };
       _showSnack(msg);
     } on TimeoutException {
+      // Hết thời gian chờ
       _showSnack('Mạng chậm, vui lòng thử lại.');
     } catch (e) {
+      // Các lỗi khác (parse, null, network...)
       _showSnack('Lỗi khi đăng nhập: $e');
     } finally {
+      // Luôn tắt loading để trả UI về trạng thái bình thường
       _toggleLoading(false);
     }
   }
 
   // -------------------- Google Sign-In (nhẹ máy, tránh double tap) --------------------
+  /// Đăng nhập qua Google bằng AuthService
+  /// - Khoá nút khi đang _isLoading để tránh double-tap
+  /// - Nếu nhận được user != null -> điều hướng về Home
   Future<void> _loginWithGoogle() async {
-    if (_isLoading) return;
+    if (_isLoading) return; // chặn double tap
     _toggleLoading(true);
     try {
       final user = await widget.authService.signInWithGoogle();
@@ -126,9 +147,10 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0B0F),
+      backgroundColor: const Color(0xFF0B0B0F), // Nền tối đồng bộ app
       body: SafeArea(
         child: SingleChildScrollView(
+          // Cho phép cuộn khi bàn phím mở/thiết bị nhỏ
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -155,21 +177,22 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 36),
 
-              // Form
+              // -------------------- Form đăng nhập --------------------
               Form(
-                key: _formKey,
+                key: _formKey, // gắn key để validate
                 child: Column(
                   children: [
-                    // Username
+                    // ====== Ô nhập Username ======
                     TextFormField(
                       controller: _usernameCtrl,
-                      textInputAction: TextInputAction.next,
-                      autocorrect: false,
+                      textInputAction:
+                          TextInputAction.next, // Next -> chuyển xuống mật khẩu
+                      autocorrect: false, // tắt gợi ý/sửa tự động
                       enableSuggestions: false,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: const Color(0xFF1C1C28),
+                        fillColor: const Color(0xFF1C1C28), // nền input
                         labelText: 'Tên đăng nhập',
                         labelStyle: const TextStyle(color: Colors.white60),
                         prefixIcon: const Icon(
@@ -181,17 +204,19 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderSide: BorderSide.none,
                         ),
                       ),
+                      // Validation: không rỗng
                       validator: (v) => (v == null || v.trim().isEmpty)
                           ? 'Tên đăng nhập không được để trống'
                           : null,
                     ),
                     const SizedBox(height: 16),
 
-                    // Password
+                    // ====== Ô nhập Password ======
                     TextFormField(
                       controller: _passwordCtrl,
-                      textInputAction: TextInputAction.done,
-                      obscureText: _obscurePw,
+                      textInputAction:
+                          TextInputAction.done, // Done -> gọi submit
+                      obscureText: _obscurePw, // bật/tắt ẩn mật khẩu
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         filled: true,
@@ -202,6 +227,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           Icons.lock_outline,
                           color: Colors.white60,
                         ),
+                        // Nút con mắt để ẩn/hiện mật khẩu
                         suffixIcon: IconButton(
                           icon: Icon(
                             _obscurePw
@@ -217,20 +243,22 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderSide: BorderSide.none,
                         ),
                       ),
+                      // Validation: >= 6 ký tự
                       validator: (v) => (v == null || v.length < 6)
                           ? 'Mật khẩu ít nhất 6 ký tự'
                           : null,
+                      // Nhấn enter trên bàn phím -> trigger đăng nhập
                       onFieldSubmitted: (_) => _loginWithUsernamePassword(),
                     ),
                     const SizedBox(height: 24),
 
-                    // Nút đăng nhập
+                    // ====== Nút Đăng nhập ======
                     SizedBox(
                       width: double.infinity,
                       height: 56,
                       child: ElevatedButton(
                         onPressed: _isLoading
-                            ? null
+                            ? null // Khi loading -> disable nút (tránh double tap)
                             : _loginWithUsernamePassword,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF8B1E9B),
@@ -259,7 +287,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Google Sign-In
+                    // ====== Nút Google Sign-In ======
                     SizedBox(
                       width: double.infinity,
                       height: 48,
@@ -272,7 +300,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Điều hướng sang đăng ký
+                    // ====== Điều hướng sang màn đăng ký ======
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -282,6 +310,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         GestureDetector(
                           onTap: () {
+                            // Điều hướng sang RegisterScreen, truyền cùng AuthService
                             Navigator.push(
                               context,
                               MaterialPageRoute(

@@ -1,6 +1,7 @@
 // lib/screens/cinema_about_screen.dart
-import 'dart:convert'; // NEW
-import 'package:flutter/foundation.dart'; // NEW
+
+import 'dart:convert'; // NEW: dùng jsonEncode/jsonDecode để chuyển map <-> json text
+import 'package:flutter/foundation.dart'; // NEW: dùng compute(...) chạy parse ở isolate phụ
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -10,63 +11,79 @@ import '../models/cinema_about.dart';
 import '../models/snack_model.dart';
 
 class CinemaAboutScreen extends StatefulWidget {
-  final Cinema cinema;
+  final Cinema cinema; // Rạp cơ sở (base) truyền sang
   const CinemaAboutScreen({super.key, required this.cinema});
 
   @override
   State<CinemaAboutScreen> createState() => _CinemaAboutScreenState();
 }
 
+// AutomaticKeepAliveClientMixin: giữ state & scroll position khi rời về rồi quay lại màn
 class _CinemaAboutScreenState extends State<CinemaAboutScreen>
     with AutomaticKeepAliveClientMixin {
-  // NEW: giữ state
+  // DatabaseReference gốc tới Realtime Database
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
 
+  // Tương lai (Future) chứa thông tin mở rộng của rạp (CinemaAbout) lấy 1 lần từ '/cinema_about/{id}'
   late final Future<CinemaAbout?> _aboutFuture;
 
-  // Giới hạn render để tránh build quá nhiều item 1 lượt
+  // Giới hạn render để tránh build quá nhiều item 1 lượt (tối ưu hiệu năng)
   static const int _maxPromotions = 20;
   static const int _maxSnacks = 30;
 
   @override
   void initState() {
     super.initState();
+    // Khởi tạo future ngay từ đầu, tránh gọi lại khi build nhiều lần
     _aboutFuture = _fetchAboutOnce();
   }
 
   @override
-  bool get wantKeepAlive => true; // NEW
+  bool get wantKeepAlive => true; // NEW: bật keep-alive state cho màn hình này
 
   // ---------- Parse ở isolate để không block UI thread ----------
+  // Hàm tĩnh nhận tuple (jsonText, baseCinema) -> trả về CinemaAbout
+  // Mục tiêu: chuyển JSON text sang Map và fromMap ở isolate phụ để UI không giật
   static CinemaAbout? _parseAboutIsolate((String, Cinema) data) {
-    // NEW
-    final (jsonText, base) = data;
-    final map = jsonDecode(jsonText) as Map<String, dynamic>;
-    return CinemaAbout.fromMap(map, base: base);
+    final (jsonText, base) = data; // Dart records: tách tuple
+    final map = jsonDecode(jsonText) as Map<String, dynamic>; // JSON -> Map
+    return CinemaAbout.fromMap(
+      map,
+      base: base,
+    ); // Tạo CinemaAbout kèm base cinema
   }
 
+  // Lấy dữ liệu mở rộng của rạp đúng 1 lần (one-shot) từ RTDB
   Future<CinemaAbout?> _fetchAboutOnce() async {
     try {
       final snap = await _db
-          .child('cinema_about/${widget.cinema.id}')
+          .child(
+            'cinema_about/${widget.cinema.id}',
+          ) // Path: /cinema_about/<id-rạp>
           .get()
-          .timeout(const Duration(seconds: 4)); // NEW: fail nhanh hơn
+          .timeout(
+            const Duration(seconds: 4),
+          ); // NEW: fail nhanh để UI không treo
 
       if (snap.exists && snap.value is Map) {
-        // chuyển về json text rồi parse ở isolate (compute)  // NEW
+        // Chuyển snapshot.value (Map) -> JSON text để truyền qua isolate dễ & hiệu quả
         final jsonText = jsonEncode(snap.value);
+        // compute(...) chạy _parseAboutIsolate ở isolate khác -> không nghẽn UI thread
         return await compute(_parseAboutIsolate, (jsonText, widget.cinema));
       }
     } catch (_) {
-      // bỏ qua lỗi mạng/rules -> fallback base
+      // Bỏ qua lỗi (mạng, rules DB, format), fallback sẽ dùng dữ liệu 'base' (widget.cinema)
     }
-    return null;
+    return null; // Không có about -> UI hiển thị phần base tối thiểu
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // NEW: khi dùng keep-alive
-    final base = widget.cinema;
+    super.build(
+      context,
+    ); // NEW: bắt buộc khi dùng keep-alive để Flutter ghi nhớ trạng thái
+    final base =
+        widget.cinema; // Dữ liệu rạp cơ sở (ảnh, địa chỉ, hours, snacks...)
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B0B0F),
@@ -75,7 +92,7 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen>
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
-          base.name,
+          base.name, // Tên rạp ở tiêu đề
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -83,46 +100,54 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen>
         ),
       ),
       body: FutureBuilder<CinemaAbout?>(
-        future: _aboutFuture,
+        future: _aboutFuture, // Future lấy 1 lần
         builder: (context, snap) {
+          // 1) Trạng thái đang chờ dữ liệu -> spinner
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(color: Color(0xFF8B1E9B)),
             );
           }
-          final a = snap.data; // có thể null
 
+          // 2) Dữ liệu có thể null -> chỉ có 'base' (fallback)
+          final a = snap.data;
+
+          // Dùng CustomScrollView + Sliver để tối ưu danh sách dài, mượt cuộn
           return CustomScrollView(
-            physics: const BouncingScrollPhysics(), // NEW
-            cacheExtent: 300, // NEW: bớt pre-render
+            physics: const BouncingScrollPhysics(), // NEW: kéo mượt kiểu iOS
+            cacheExtent: 300, // NEW: giảm vùng pre-render để nhẹ hơn
             slivers: [
+              // ---------------- Header: tên rạp + brand + logo ----------------
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: _Header(
                     name: base.name,
-                    brand: a?.brand ?? '',
-                    logoUrl: a?.logoUrl ?? '',
+                    brand: a?.brand ?? '', // From about (nếu có)
+                    logoUrl: a?.logoUrl ?? '', // From about (nếu có)
                   ),
                 ),
               ),
 
+              // ---------------- Ảnh cover ----------------
               if ((a?.images.isNotEmpty ?? false) || base.imageUrl.isNotEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                     child: RepaintBoundary(
-                      // NEW
+                      // NEW: cô lập repaint của ảnh cover -> giảm layout/repaint thừa
                       child: _Cover(
                         imageUrl: (a?.images.isNotEmpty ?? false)
-                            ? a!.images.first
-                            : base.imageUrl,
+                            ? a!
+                                  .images
+                                  .first // Ưu tiên ảnh từ about
+                            : base.imageUrl, // Fallback ảnh base
                       ),
                     ),
                   ),
                 ),
 
-              // ----- Thông tin cơ bản -----
+              // ---------------- Thông tin cơ bản ----------------
               _section('Thông tin'),
               SliverToBoxAdapter(
                 child: Padding(
@@ -145,7 +170,7 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen>
                 ),
               ),
 
-              // ----- Liên hệ -----
+              // ---------------- Liên hệ (nếu có) ----------------
               if ((a?.phone ?? '').isNotEmpty ||
                   (a?.email ?? '').isNotEmpty ||
                   (a?.website ?? '').isNotEmpty) ...[
@@ -167,7 +192,7 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen>
                 ),
               ],
 
-              // ----- Giờ mở cửa chi tiết -----
+              // ---------------- Giờ mở cửa chi tiết ----------------
               if ((a?.openHours?.isNotEmpty ?? false) ||
                   (a?.openHoursByDay.isNotEmpty ?? false)) ...[
                 _section('Giờ mở cửa'),
@@ -180,16 +205,17 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen>
                         if ((a?.openHours ?? '').isNotEmpty)
                           _InfoBox(
                             child: Text(
-                              a!.openHours!,
+                              a!.openHours!, // chuỗi mô tả chung
                               style: const TextStyle(color: Colors.white70),
                             ),
                           ),
                         if ((a?.openHoursByDay.isNotEmpty ?? false))
                           _InfoBox(
+                            // NEW: giới hạn .take(14) để không render quá dài (tối ưu)
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: a!.openHoursByDay.entries
-                                  .take(14) // NEW: tránh list quá dài
+                                  .take(14)
                                   .map(
                                     (e) => Text(
                                       '${e.key}: ${e.value}',
@@ -207,7 +233,7 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen>
                 ),
               ],
 
-              // ----- Giới thiệu -----
+              // ---------------- Giới thiệu ----------------
               if ((a?.description ?? '').isNotEmpty) ...[
                 _section('Giới thiệu'),
                 SliverToBoxAdapter(
@@ -226,18 +252,20 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen>
                 ),
               ],
 
-              // ----- Tiện ích -----
+              // ---------------- Tiện ích ----------------
               if ((a?.amenities.isNotEmpty ?? false)) ...[
                 _section('Tiện ích'),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _AmenitiesChips(items: a!.amenities),
+                    child: _AmenitiesChips(
+                      items: a!.amenities,
+                    ), // các chip tiện ích
                   ),
                 ),
               ],
 
-              // ----- Giá vé -----
+              // ---------------- Giá vé ----------------
               if ((a?.ticketPrices.isNotEmpty ?? false)) ...[
                 _section('Giá vé tham khảo'),
                 SliverToBoxAdapter(
@@ -245,6 +273,7 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Column(
                       children: a!.ticketPrices.entries.map((grp) {
+                        // Đặt lại nhãn nhóm giá cho thân thiện
                         final title = grp.key == 'weekday'
                             ? 'Ngày thường'
                             : (grp.key == 'weekend' ? 'Cuối tuần' : grp.key);
@@ -260,8 +289,9 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen>
                                 ),
                               ),
                               const SizedBox(height: 6),
+                              // NEW: .take(12) giới hạn số dòng giá hiển thị
                               ...grp.value.entries
-                                  .take(12) // NEW
+                                  .take(12)
                                   .map(
                                     (e) => Text(
                                       '${e.key}: ${e.value}đ',
@@ -279,7 +309,7 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen>
                 ),
               ],
 
-              // ----- Khuyến mãi (lazy) -----
+              // ---------------- Khuyến mãi (lazy) ----------------
               if ((a?.promotions.isNotEmpty ?? false)) ...[
                 _section('Khuyến mãi'),
                 SliverList(
@@ -287,19 +317,19 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen>
                     (context, i) => Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                       child: RepaintBoundary(
-                        // NEW
+                        // NEW: mỗi card nằm trong RepaintBoundary giảm repaint dây chuyền
                         child: _PromotionCard(promotion: a!.promotions[i]),
                       ),
                     ),
                     childCount: a!.promotions.length.clamp(0, _maxPromotions),
-                    addAutomaticKeepAlives: false, // NEW
+                    addAutomaticKeepAlives: false, // NEW: tự tối ưu list
                     addRepaintBoundaries: true, // NEW
                     addSemanticIndexes: false, // NEW
                   ),
                 ),
               ],
 
-              // ----- Snacks (lazy) -----
+              // ---------------- Snacks (lazy) ----------------
               if (base.snacks.isNotEmpty) ...[
                 _section('Bắp nước & đồ ăn'),
                 SliverList(
@@ -307,7 +337,7 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen>
                     (context, i) => Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                       child: RepaintBoundary(
-                        // NEW
+                        // NEW: giảm repaint cho mỗi tile
                         child: _SnackTile(snack: base.snacks[i]),
                       ),
                     ),
@@ -326,7 +356,7 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen>
     );
   }
 
-  // Title chung cho các block
+  // Title chung cho các block (gói trong SliverToBoxAdapter để nhét vào CustomScrollView)
   SliverToBoxAdapter _section(String title) => SliverToBoxAdapter(
     child: Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -361,10 +391,10 @@ class _Header extends StatelessWidget {
               imageUrl: logoUrl,
               width: 56,
               height: 56,
-              memCacheWidth: 112,
+              memCacheWidth: 112, // Cache ảnh kích thước nhỏ (tiết kiệm RAM)
               fit: BoxFit.cover,
-              filterQuality: FilterQuality.low, // NEW
-              fadeInDuration: Duration.zero, // NEW
+              filterQuality: FilterQuality.low, // NEW: lọc ảnh nhẹ hơn
+              fadeInDuration: Duration.zero, // NEW: bỏ animation để mượt hơn
               fadeOutDuration: Duration.zero, // NEW
               errorWidget: (_, __, ___) =>
                   const Icon(Icons.movie, color: Colors.white54),
@@ -380,6 +410,7 @@ class _Header extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Tên rạp (đậm)
               Text(
                 name,
                 style: const TextStyle(
@@ -388,6 +419,7 @@ class _Header extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
+              // Brand (nếu có)
               if (hasBrand)
                 Text(brand, style: const TextStyle(color: Colors.white70)),
             ],
@@ -405,15 +437,15 @@ class _Cover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AspectRatio(
-      aspectRatio: 16 / 9,
+      aspectRatio: 16 / 9, // Duy trì tỉ lệ ảnh cover
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: CachedNetworkImage(
           imageUrl: imageUrl,
-          memCacheWidth: 720, // NEW: nhẹ hơn 960
+          memCacheWidth: 720, // NEW: nhỏ hơn 960 để tiết kiệm bộ nhớ
           fit: BoxFit.cover,
-          filterQuality: FilterQuality.low, // NEW
-          fadeInDuration: Duration.zero, // NEW
+          filterQuality: FilterQuality.low, // NEW: giảm chi phí lọc
+          fadeInDuration: Duration.zero, // NEW: giảm jank animation
           fadeOutDuration: Duration.zero, // NEW
           errorWidget: (_, __, ___) => Container(
             color: const Color(0xFF1C1C28),
@@ -438,6 +470,7 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Tiêu đề block (màu trắng, đậm)
     return Text(
       text,
       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
@@ -452,6 +485,7 @@ class _InfoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 1 dòng thông tin (icon + text) trong một container tối giản
     return Container(
       padding: const EdgeInsets.all(12),
       margin: const EdgeInsets.only(bottom: 8),
@@ -479,6 +513,7 @@ class _InfoBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Hộp chứa nội dung văn bản/nhóm dòng (vd mô tả, giờ mở cửa chi tiết)
     return Container(
       padding: const EdgeInsets.all(12),
       margin: const EdgeInsets.only(bottom: 8),
@@ -498,7 +533,8 @@ class _AmenitiesChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const SizedBox.shrink();
+    if (items.isEmpty) return const SizedBox.shrink(); // Không gì để hiển thị
+    // Hiển thị list tiện ích dạng chip đơn giản
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -520,7 +556,8 @@ class _AmenitiesChips extends StatelessWidget {
 }
 
 class _PromotionCard extends StatelessWidget {
-  final Promotion promotion;
+  final Promotion
+  promotion; // Thực thể khuyến mãi (title, content, image, validUntil)
   const _PromotionCard({required this.promotion});
 
   @override
@@ -544,7 +581,7 @@ class _PromotionCard extends StatelessWidget {
                 imageUrl: promotion.imageUrl,
                 height: 150,
                 width: double.infinity,
-                memCacheWidth: 800, // NEW
+                memCacheWidth: 800, // NEW: khống chế kích thước cache để nhẹ
                 fit: BoxFit.cover,
                 filterQuality: FilterQuality.low, // NEW
                 fadeInDuration: Duration.zero, // NEW
@@ -556,6 +593,7 @@ class _PromotionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Tiêu đề khuyến mãi
                 Text(
                   promotion.title,
                   style: const TextStyle(
@@ -564,10 +602,12 @@ class _PromotionCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
+                // Nội dung khuyến mãi
                 Text(
                   promotion.content,
                   style: const TextStyle(color: Colors.white70),
                 ),
+                // Hạn sử dụng (nếu có)
                 if (promotion.validUntil.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(
@@ -585,7 +625,7 @@ class _PromotionCard extends StatelessWidget {
 }
 
 class _SnackTile extends StatelessWidget {
-  final Snack snack;
+  final Snack snack; // Món/bắp nước: name, price, imageUrl?
   const _SnackTile({required this.snack});
 
   @override
@@ -608,7 +648,7 @@ class _SnackTile extends StatelessWidget {
                 imageUrl: snack.imageUrl!,
                 width: 56,
                 height: 56,
-                memCacheWidth: 224,
+                memCacheWidth: 224, // Giới hạn cache ảnh nhỏ
                 fit: BoxFit.cover,
                 filterQuality: FilterQuality.low, // NEW
                 fadeInDuration: Duration.zero, // NEW
@@ -620,6 +660,7 @@ class _SnackTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Tên món
                 Text(
                   snack.name,
                   style: const TextStyle(
@@ -627,6 +668,7 @@ class _SnackTile extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+                // Giá món
                 Text(
                   '${snack.price}đ',
                   style: const TextStyle(color: Colors.white70),

@@ -13,13 +13,14 @@ class SnackScreen extends StatefulWidget {
 }
 
 class _SnackScreenState extends State<SnackScreen> {
-  String selectedCinemaId = '';
-  String filter = 'Tất cả';
-  String searchQuery = '';
-  final DatabaseReference _database = FirebaseDatabase.instance.ref();
+  String selectedCinemaId = ''; // id rạp đang chọn để load snack theo rạp
+  String filter = 'Tất cả'; // (để mở rộng: lọc loại snack)
+  String searchQuery = ''; // (để mở rộng: tìm kiếm snack)
+  final DatabaseReference _database = FirebaseDatabase.instance
+      .ref(); // root DB
 
-  final List<Snack> cartItems = [];
-  int cartCount = 0;
+  final List<Snack> cartItems = []; // giỏ hàng hiện tại
+  int cartCount = 0; // hiển thị badge số lượng trên icon cart
 
   // ================== Helpers: Giá & Ảnh ==================
 
@@ -33,6 +34,7 @@ class _SnackScreenState extends State<SnackScreen> {
       return v < 1000 ? (v * 1000).round() : v.round();
     }
     if (raw is String) {
+      // Loại bỏ ký tự không phải số/dấu chấm (đề phòng dữ liệu "65k", "65.000")
       final cleaned = raw.replaceAll(RegExp(r'[^0-9.]'), '');
       if (cleaned.isEmpty) return 0;
       final v = double.tryParse(cleaned) ?? 0;
@@ -41,19 +43,22 @@ class _SnackScreenState extends State<SnackScreen> {
     return 0;
   }
 
-  /// Lấy URL ảnh từ nhiều key phổ biến trong Firebase
+  /// Lấy URL ảnh từ nhiều key phổ biến trong Firebase để chống lệch schema
   String _getImageUrl(Map<String, dynamic> m) {
     final keys = ['imageUrl', 'imageURL', 'image', 'img'];
     for (final k in keys) {
       final v = m[k];
       if (v is String && v.trim().isNotEmpty) return v.trim();
     }
-    return '';
+    return ''; // fallback rỗng -> hiển thị placeholder
   }
 
+  /// Format tiền VND có dấu phẩy ngăn cách + hậu tố "đ"
   String _fmtCurrency(num vnd) => '${NumberFormat("#,##0").format(vnd)} đ';
 
   // ================== Cart ==================
+
+  /// Thêm 1 món snack vào giỏ + tăng badge
   void addToCart(Snack snack) {
     setState(() {
       cartItems.add(snack);
@@ -64,8 +69,10 @@ class _SnackScreenState extends State<SnackScreen> {
     ).showSnackBar(SnackBar(content: Text('Đã thêm ${snack.name} vào giỏ')));
   }
 
+  /// Tổng tiền hiện tại của giỏ (đơn vị: đồng)
   double get totalPrice => cartItems.fold(0, (sum, item) => sum + (item.price));
 
+  /// Mở dialog giỏ hàng: liệt kê món + tổng tiền + nút thanh toán QR
   void _openCartDialog() {
     if (cartItems.isEmpty) {
       ScaffoldMessenger.of(
@@ -85,8 +92,9 @@ class _SnackScreenState extends State<SnackScreen> {
         ),
         content: SingleChildScrollView(
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: MainAxisSize.min, // fit nội dung
             children: [
+              // Liệt kê từng item trong giỏ
               ...cartItems.map(
                 (snack) => ListTile(
                   dense: true,
@@ -101,6 +109,7 @@ class _SnackScreenState extends State<SnackScreen> {
                 ),
               ),
               const Divider(color: Colors.white30),
+              // Hàng tổng tiền
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -118,6 +127,7 @@ class _SnackScreenState extends State<SnackScreen> {
                 ],
               ),
               const SizedBox(height: 16),
+              // Nút thanh toán -> đóng dialog -> mở bottom sheet QR
               ElevatedButton.icon(
                 onPressed: () {
                   Navigator.pop(context);
@@ -140,10 +150,11 @@ class _SnackScreenState extends State<SnackScreen> {
     );
   }
 
+  /// Hiện QR thanh toán ở bottom sheet (mã giả lập chứa: mã đơn + danh sách món + tổng tiền)
   void _showQrSheet() {
-    final orderId = DateTime.now().millisecondsSinceEpoch.toString();
-    final snackNames = cartItems.map((e) => e.name).join(', ');
-    final total = _fmtCurrency(totalPrice);
+    final orderId = DateTime.now().millisecondsSinceEpoch.toString(); // mã đơn
+    final snackNames = cartItems.map((e) => e.name).join(', '); // liệt kê món
+    final total = _fmtCurrency(totalPrice); // tiền đã format
 
     final qrData =
         'Thanh toán bắp nước\nMã đơn: $orderId\nMón: $snackNames\nTổng tiền: $total';
@@ -157,7 +168,7 @@ class _SnackScreenState extends State<SnackScreen> {
       builder: (context) => Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.min, // chỉ cao vừa QR + nút
           children: [
             const Text(
               'Mã QR Thanh Toán',
@@ -168,8 +179,9 @@ class _SnackScreenState extends State<SnackScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            // QR để người dùng quét (demo)
             Container(
-              color: Colors.white,
+              color: Colors.white, // nền trắng giúp máy quét dễ nhận
               padding: const EdgeInsets.all(8),
               child: QrImageView(
                 data: qrData,
@@ -179,6 +191,7 @@ class _SnackScreenState extends State<SnackScreen> {
               ),
             ),
             const SizedBox(height: 12),
+            // Hiển thị tổng tiền + mã đơn
             Text(
               total,
               style: const TextStyle(
@@ -193,6 +206,7 @@ class _SnackScreenState extends State<SnackScreen> {
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
             const SizedBox(height: 16),
+            // Nút xác nhận thanh toán (giả lập) -> clear giỏ
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
@@ -211,6 +225,7 @@ class _SnackScreenState extends State<SnackScreen> {
     );
   }
 
+  /// Sau khi "thanh toán" thành công (giả lập) -> hiển thị toast + reset giỏ
   void _showSuccess(String orderId) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -242,6 +257,7 @@ class _SnackScreenState extends State<SnackScreen> {
           ),
         ),
         actions: [
+          // Icon giỏ hàng + badge số lượng
           Stack(
             children: [
               IconButton(
@@ -275,9 +291,11 @@ class _SnackScreenState extends State<SnackScreen> {
       ),
       body: Column(
         children: [
-          // --- Dropdown chọn rạp từ Firebase ---
+          // --- Dropdown chọn rạp từ Firebase (stream realtime) ---
           StreamBuilder<DatabaseEvent>(
-            stream: _database.child('cinemas').onValue,
+            stream: _database
+                .child('cinemas')
+                .onValue, // lắng nghe mọi thay đổi
             builder: (context, snapshot) {
               if (snapshot.hasError) {
                 return Padding(
@@ -290,6 +308,7 @@ class _SnackScreenState extends State<SnackScreen> {
               }
 
               if (!snapshot.hasData || snapshot.data!.snapshot.value == null) {
+                // Chưa có dữ liệu rạp
                 return const Padding(
                   padding: EdgeInsets.all(16.0),
                   child: Text(
@@ -299,6 +318,7 @@ class _SnackScreenState extends State<SnackScreen> {
                 );
               }
 
+              // Chuẩn hoá snapshot (Map hoặc List) về Map<String, dynamic>
               final rawData = snapshot.data!.snapshot.value;
               Map<String, dynamic> cinemasMap = {};
               if (rawData is Map) {
@@ -313,6 +333,7 @@ class _SnackScreenState extends State<SnackScreen> {
                 }
               }
 
+              // Nếu chưa chọn rạp -> chọn rạp đầu tiên
               if (selectedCinemaId.isEmpty && cinemasMap.isNotEmpty) {
                 selectedCinemaId = cinemasMap.keys.first;
               }
@@ -327,7 +348,7 @@ class _SnackScreenState extends State<SnackScreen> {
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: DropdownButton<String>(
-                    value: selectedCinemaId,
+                    value: selectedCinemaId.isEmpty ? null : selectedCinemaId,
                     hint: const Text(
                       'Chọn rạp',
                       style: TextStyle(color: Color(0xFFB9B9C3)),
@@ -362,15 +383,17 @@ class _SnackScreenState extends State<SnackScreen> {
             },
           ),
 
-          // --- Danh sách snack ---
+          // --- Danh sách snack theo rạp đã chọn ---
           Expanded(
             child: selectedCinemaId.isEmpty
+                // Nếu chưa chọn rạp: nhắc chọn
                 ? const Center(
                     child: Text(
                       'Hãy chọn một rạp để xem bắp nước',
                       style: TextStyle(color: Color(0xFFB9B9C3)),
                     ),
                   )
+                // Nếu đã chọn rạp: lắng nghe snacks của rạp đó
                 : StreamBuilder<DatabaseEvent>(
                     stream: _database
                         .child('cinemas/$selectedCinemaId/snacks')
@@ -378,6 +401,7 @@ class _SnackScreenState extends State<SnackScreen> {
                     builder: (context, snapshot) {
                       if (!snapshot.hasData ||
                           snapshot.data!.snapshot.value == null) {
+                        // Không có danh sách snack cho rạp này
                         return const Center(
                           child: Text(
                             'Không có dữ liệu bắp nước',
@@ -386,6 +410,7 @@ class _SnackScreenState extends State<SnackScreen> {
                         );
                       }
 
+                      // Chuẩn hoá snapshot (Map hoặc List) về Map<dynamic, dynamic>
                       final data = snapshot.data!.snapshot.value;
                       Map<dynamic, dynamic> snacksMap = {};
                       if (data is Map) {
@@ -396,10 +421,13 @@ class _SnackScreenState extends State<SnackScreen> {
                         }
                       }
 
+                      // Chuyển map -> List<Snack> domain model
                       final snacks = snacksMap.entries.map((entry) {
                         final s = Map<String, dynamic>.from(entry.value);
-                        // ✅ Giá lưu VND (đồng) sau chuẩn hoá
+
+                        // ✅ Giá chuẩn hoá về VND (đồng)
                         final priceVND = _toVND(s['price']).toDouble();
+
                         // ✅ Ảnh lấy an toàn theo nhiều key
                         final image = _getImageUrl(s);
 
@@ -412,12 +440,13 @@ class _SnackScreenState extends State<SnackScreen> {
                         );
                       }).toList();
 
+                      // Lưới món snack 2 cột
                       return GridView.builder(
                         padding: const EdgeInsets.all(8),
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              childAspectRatio: 0.75,
+                              crossAxisCount: 2, // 2 cột
+                              childAspectRatio: 0.75, // tỉ lệ thẻ
                               crossAxisSpacing: 8,
                               mainAxisSpacing: 8,
                             ),
@@ -432,6 +461,7 @@ class _SnackScreenState extends State<SnackScreen> {
     );
   }
 
+  /// Thẻ hiển thị 1 món snack (ảnh, tên, giá, nút Thêm)
   Widget _buildSnackCard(Snack snack) {
     return Container(
       decoration: BoxDecoration(
@@ -442,7 +472,7 @@ class _SnackScreenState extends State<SnackScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Ảnh snack
+          // Ảnh snack (có placeholder/error an toàn)
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
             child: CachedNetworkImage(
@@ -450,8 +480,8 @@ class _SnackScreenState extends State<SnackScreen> {
               height: 120,
               width: double.infinity,
               fit: BoxFit.cover,
-              memCacheWidth: 600,
-              filterQuality: FilterQuality.low,
+              memCacheWidth: 600, // giảm RAM khi cache
+              filterQuality: FilterQuality.low, // load nhanh hơn
               fadeInDuration: Duration.zero,
               fadeOutDuration: Duration.zero,
               placeholder: (context, url) => Container(
@@ -466,12 +496,13 @@ class _SnackScreenState extends State<SnackScreen> {
               ),
             ),
           ),
-          // Nội dung
+          // Nội dung: tên + giá + nút Thêm
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Tên món
                 Text(
                   snack.name,
                   maxLines: 2,
@@ -483,11 +514,13 @@ class _SnackScreenState extends State<SnackScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
+                // Giá (VND) đã format
                 Text(
-                  _fmtCurrency(snack.price), // <-- VND đã format
+                  _fmtCurrency(snack.price),
                   style: const TextStyle(color: Color(0xFF8B1E9B)),
                 ),
                 const SizedBox(height: 6),
+                // Nút thêm vào giỏ
                 ElevatedButton(
                   onPressed: () => addToCart(snack),
                   style: ElevatedButton.styleFrom(
