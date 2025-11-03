@@ -1,4 +1,6 @@
 // lib/screens/cinema_about_screen.dart
+import 'dart:convert'; // NEW
+import 'package:flutter/foundation.dart'; // NEW
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -15,7 +17,9 @@ class CinemaAboutScreen extends StatefulWidget {
   State<CinemaAboutScreen> createState() => _CinemaAboutScreenState();
 }
 
-class _CinemaAboutScreenState extends State<CinemaAboutScreen> {
+class _CinemaAboutScreenState extends State<CinemaAboutScreen>
+    with AutomaticKeepAliveClientMixin {
+  // NEW: giữ state
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
 
   late final Future<CinemaAbout?> _aboutFuture;
@@ -30,18 +34,28 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen> {
     _aboutFuture = _fetchAboutOnce();
   }
 
+  @override
+  bool get wantKeepAlive => true; // NEW
+
+  // ---------- Parse ở isolate để không block UI thread ----------
+  static CinemaAbout? _parseAboutIsolate((String, Cinema) data) {
+    // NEW
+    final (jsonText, base) = data;
+    final map = jsonDecode(jsonText) as Map<String, dynamic>;
+    return CinemaAbout.fromMap(map, base: base);
+  }
+
   Future<CinemaAbout?> _fetchAboutOnce() async {
     try {
       final snap = await _db
           .child('cinema_about/${widget.cinema.id}')
           .get()
-          .timeout(const Duration(seconds: 5)); // tránh treo
+          .timeout(const Duration(seconds: 4)); // NEW: fail nhanh hơn
 
       if (snap.exists && snap.value is Map) {
-        return CinemaAbout.fromMap(
-          Map<dynamic, dynamic>.from(snap.value as Map),
-          base: widget.cinema,
-        );
+        // chuyển về json text rồi parse ở isolate (compute)  // NEW
+        final jsonText = jsonEncode(snap.value);
+        return await compute(_parseAboutIsolate, (jsonText, widget.cinema));
       }
     } catch (_) {
       // bỏ qua lỗi mạng/rules -> fallback base
@@ -51,6 +65,7 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // NEW: khi dùng keep-alive
     final base = widget.cinema;
 
     return Scaffold(
@@ -78,6 +93,8 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen> {
           final a = snap.data; // có thể null
 
           return CustomScrollView(
+            physics: const BouncingScrollPhysics(), // NEW
+            cacheExtent: 300, // NEW: bớt pre-render
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
@@ -94,10 +111,13 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen> {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: _Cover(
-                      imageUrl: (a?.images.isNotEmpty ?? false)
-                          ? a!.images.first
-                          : base.imageUrl,
+                    child: RepaintBoundary(
+                      // NEW
+                      child: _Cover(
+                        imageUrl: (a?.images.isNotEmpty ?? false)
+                            ? a!.images.first
+                            : base.imageUrl,
+                      ),
                     ),
                   ),
                 ),
@@ -169,6 +189,7 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: a!.openHoursByDay.entries
+                                  .take(14) // NEW: tránh list quá dài
                                   .map(
                                     (e) => Text(
                                       '${e.key}: ${e.value}',
@@ -239,12 +260,16 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen> {
                                 ),
                               ),
                               const SizedBox(height: 6),
-                              ...grp.value.entries.map(
-                                (e) => Text(
-                                  '${e.key}: ${e.value}đ',
-                                  style: const TextStyle(color: Colors.white70),
-                                ),
-                              ),
+                              ...grp.value.entries
+                                  .take(12) // NEW
+                                  .map(
+                                    (e) => Text(
+                                      '${e.key}: ${e.value}đ',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                  ),
                             ],
                           ),
                         );
@@ -261,9 +286,15 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen> {
                   delegate: SliverChildBuilderDelegate(
                     (context, i) => Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                      child: _PromotionCard(promotion: a!.promotions[i]),
+                      child: RepaintBoundary(
+                        // NEW
+                        child: _PromotionCard(promotion: a!.promotions[i]),
+                      ),
                     ),
                     childCount: a!.promotions.length.clamp(0, _maxPromotions),
+                    addAutomaticKeepAlives: false, // NEW
+                    addRepaintBoundaries: true, // NEW
+                    addSemanticIndexes: false, // NEW
                   ),
                 ),
               ],
@@ -275,9 +306,15 @@ class _CinemaAboutScreenState extends State<CinemaAboutScreen> {
                   delegate: SliverChildBuilderDelegate(
                     (context, i) => Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      child: _SnackTile(snack: base.snacks[i]),
+                      child: RepaintBoundary(
+                        // NEW
+                        child: _SnackTile(snack: base.snacks[i]),
+                      ),
                     ),
                     childCount: base.snacks.length.clamp(0, _maxSnacks),
+                    addAutomaticKeepAlives: false, // NEW
+                    addRepaintBoundaries: true, // NEW
+                    addSemanticIndexes: false, // NEW
                   ),
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 16)),
@@ -326,9 +363,9 @@ class _Header extends StatelessWidget {
               height: 56,
               memCacheWidth: 112,
               fit: BoxFit.cover,
-              filterQuality: FilterQuality.low,
-              fadeInDuration: Duration.zero,
-              fadeOutDuration: Duration.zero,
+              filterQuality: FilterQuality.low, // NEW
+              fadeInDuration: Duration.zero, // NEW
+              fadeOutDuration: Duration.zero, // NEW
               errorWidget: (_, __, ___) =>
                   const Icon(Icons.movie, color: Colors.white54),
               progressIndicatorBuilder: (_, __, ___) => const SizedBox(
@@ -373,11 +410,11 @@ class _Cover extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: CachedNetworkImage(
           imageUrl: imageUrl,
-          memCacheWidth: 960, // ~HD nhẹ
+          memCacheWidth: 720, // NEW: nhẹ hơn 960
           fit: BoxFit.cover,
-          filterQuality: FilterQuality.low,
-          fadeInDuration: Duration.zero,
-          fadeOutDuration: Duration.zero,
+          filterQuality: FilterQuality.low, // NEW
+          fadeInDuration: Duration.zero, // NEW
+          fadeOutDuration: Duration.zero, // NEW
           errorWidget: (_, __, ___) => Container(
             color: const Color(0xFF1C1C28),
             child: const Icon(Icons.image, color: Colors.white54),
@@ -507,11 +544,11 @@ class _PromotionCard extends StatelessWidget {
                 imageUrl: promotion.imageUrl,
                 height: 150,
                 width: double.infinity,
-                memCacheWidth: 900,
+                memCacheWidth: 800, // NEW
                 fit: BoxFit.cover,
-                filterQuality: FilterQuality.low,
-                fadeInDuration: Duration.zero,
-                fadeOutDuration: Duration.zero,
+                filterQuality: FilterQuality.low, // NEW
+                fadeInDuration: Duration.zero, // NEW
+                fadeOutDuration: Duration.zero, // NEW
               ),
             ),
           Padding(
@@ -573,9 +610,9 @@ class _SnackTile extends StatelessWidget {
                 height: 56,
                 memCacheWidth: 224,
                 fit: BoxFit.cover,
-                filterQuality: FilterQuality.low,
-                fadeInDuration: Duration.zero,
-                fadeOutDuration: Duration.zero,
+                filterQuality: FilterQuality.low, // NEW
+                fadeInDuration: Duration.zero, // NEW
+                fadeOutDuration: Duration.zero, // NEW
               ),
             ),
           if (hasImg) const SizedBox(width: 12),
